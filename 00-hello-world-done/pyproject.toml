@@ -1,0 +1,12 @@
+[project]
+name = "hello-world-done"
+version = "0.1.0"
+description = "Part 0: Verify SAP Generative AI Hub connectivity (Complete)"
+requires-python = ">=3.12"
+dependencies = [
+    "python-dotenv>=1.0.0",
+    "sap-ai-sdk-gen[langchain]>=1.0.0",
+]
+
+[tool.uv]
+dev-dependencies = []

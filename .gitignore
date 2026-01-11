@@ -1,1 +1,21 @@
+# Workshop reference (not part of deliverable)
 /old_workshop
+
+# Environment files
+.env
+.env.local
+
+# Virtual environments
+.venv/
+__pycache__/
+*.pyc
+
+# UV lock files (optional - can be committed)
+# uv.lock
+
+# Generated outputs
+deal_memo_*.md
+
+# IDE
+.vscode/
+.idea/

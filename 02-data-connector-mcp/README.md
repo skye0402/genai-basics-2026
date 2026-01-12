@@ -37,6 +37,15 @@ uv run mcp dev mcp_server.py
 
 This opens the MCP Inspector where you can test your tools interactively.
 
+After setup you can test the MCP server **on its own** using the MCP Inspector web UI.
+This is useful for debugging your tools before wiring them into the agent.
+
+1. In the Inspector UI:
+   - **Transport type**: `STDIO`
+   - **Command**: `python`
+   - **Arguments**: `mcp_server.py`
+2. Click **Connect**, then use the **Tools** tab to call your MCP tools interactively.
+
 ### 3. Run the Agent Client
 
 ```bash

@@ -9,6 +9,7 @@
 .venv/
 __pycache__/
 *.pyc
+uv.lock
 
 # UV lock files (optional - can be committed)
 # uv.lock

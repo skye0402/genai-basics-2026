@@ -1,0 +1,49 @@
+{
+  "name": "backend-mcp",
+  "version": "0.1.0",
+  "description": "Model Context Protocol server for the backend integration layer",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -b",
+    "start": "node dist/server.js",
+    "dev": "tsx watch src/server.ts",
+    "lint": "eslint .",
+    "test:sap": "tsx tests/test-sap-integration.ts",
+    "list:deployments": "tsx tests/list-deployments.ts"
+  },
+  "dependencies": {
+    "@langchain/community": "^1.0.4",
+    "@langchain/core": "^1.0.6",
+    "@langchain/textsplitters": "^1.0.0",
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@perplexity-ai/perplexity_ai": "^0.16.0",
+    "@sap-ai-sdk/ai-api": "^2.2.0",
+    "@sap-ai-sdk/langchain": "^2.2.0",
+    "@sap-cloud-sdk/connectivity": "^4.1.2",
+    "@sap-cloud-sdk/http-client": "^4.1.2",
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "hdb": "^2.26.2",
+    "langchain": "^1.0.6",
+    "mammoth": "^1.11.0",
+    "multer": "^2.0.2",
+    "pdf-parse": "^2.4.5",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.25",
+    "@types/multer": "^2.0.0",
+    "@types/node": "^22.19.1",
+    "dotenv": "^17.2.3",
+    "eslint": "^9.39.1",
+    "eslint-config-prettier": "^9.1.2",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-unused-imports": "^4.3.0",
+    "globals": "^15.15.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.47.0"
+  }
+}

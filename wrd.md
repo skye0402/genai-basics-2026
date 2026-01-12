@@ -49,7 +49,8 @@ This workshop teaches participants to build an AI-powered **"DealCrafter Assista
 | 13:30 – 15:00 | **Part 3: The Analyst Workflow** | Hands-on |
 | 15:00 – 15:15 | **Coffee Break** | Break |
 | 15:15 – 16:30 | **Part 4: The Deal Memo Generator** | Hands-on |
-| 16:30 – 17:00 | **Wrap Up & Value Proposition** | Discussion |
+| 16:30 – 16:45 | **Part 5: DealCrafter Assembled** | Demo (facilitator) |
+| 16:45 – 17:00 | **Wrap Up & Value Proposition** | Discussion |
 
 ---
 
@@ -151,6 +152,14 @@ genai-basics-2026/
 │   ├── README.md
 │   ├── memo_generator.py
 │   └── pyproject.toml
+│
+├── 05-dealcrafter-assembled/       # Part 5: Full demo with React frontend
+│   ├── README.md                  # Architecture overview
+│   ├── SETUP.md                   # Integration instructions
+│   ├── tools/
+│   │   └── stockTool.ts           # Stock info tool for Node.js MCP
+│   └── prompts/
+│       └── dealcrafter_system.md  # System prompt for DeepAgent
 │
 ├── documentation/                  # Reference materials (from old_workshop)
 │

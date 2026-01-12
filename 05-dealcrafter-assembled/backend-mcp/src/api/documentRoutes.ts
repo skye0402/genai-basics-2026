@@ -124,6 +124,150 @@ router.post('/upload', upload.array('files', 10), async (req: Request, res: Resp
   }
 });
 
+router.get('/chunks/:chunkId', async (req: Request, res: Response) => {
+  const { chunkId } = req.params;
+
+  if (!chunkId) {
+    return res.status(400).json({
+      success: false,
+      error: 'chunkId is required',
+    });
+  }
+
+  try {
+    const service = getDocumentIngestionService();
+    const chunk = await service.getChunkById(chunkId);
+
+    if (!chunk) {
+      return res.status(404).json({
+        success: false,
+        error: `Chunk ${chunkId} not found`,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      chunk,
+    });
+  } catch (error) {
+    logError(`Failed to retrieve chunk ${chunkId}`, error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+/**
+ * GET /api/documents/images/:imageId/download
+ * Download an image by its ID (forces file download)
+ */
+router.get('/images/:imageId/download', async (req: Request, res: Response) => {
+  const { imageId } = req.params;
+
+  if (!imageId) {
+    return res.status(400).json({
+      success: false,
+      error: 'imageId is required',
+    });
+  }
+
+  try {
+    const image = await imageStorageService.getImage(imageId);
+
+    if (!image) {
+      return res.status(404).json({
+        success: false,
+        error: `Image ${imageId} not found`,
+      });
+    }
+
+    res.setHeader('Content-Type', image.mimeType);
+    res.setHeader('Content-Disposition', `attachment; filename="${imageId}"`);
+    res.setHeader('Content-Length', image.data.length);
+
+    return res.send(image.data);
+  } catch (error) {
+    logError(`Failed to download image ${imageId}`, error);
+    return res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+});
+
+/**
+ * GET /api/documents/images/:imageId/debug
+ * Browser-friendly debug view: shows metadata and attempts to render the image.
+ */
+router.get('/images/:imageId/debug', async (req: Request, res: Response) => {
+  const { imageId } = req.params;
+
+  if (!imageId) {
+    return res.status(400).send('imageId is required');
+  }
+
+  try {
+    const [meta, img] = await Promise.all([
+      imageStorageService.getImageMetadata(imageId),
+      imageStorageService.getImage(imageId),
+    ]);
+
+    if (!img) {
+      return res.status(404).send(`Image ${imageId} not found`);
+    }
+
+    const mime = img.mimeType || 'application/octet-stream';
+    const size = img.data?.length ?? 0;
+    const headHex = (img.data || Buffer.alloc(0)).subarray(0, 16).toString('hex');
+    const base64 = (img.data || Buffer.alloc(0)).toString('base64');
+
+    const html = `<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Image Debug: ${imageId}</title>
+    <style>
+      body { font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; padding: 16px; }
+      code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      .row { display: flex; gap: 24px; flex-wrap: wrap; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; }
+      img { max-width: 100%; height: auto; border: 1px solid #ddd; border-radius: 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>Image Debug</h1>
+    <div class="row">
+      <div class="card" style="min-width: 320px; flex: 1;">
+        <h2>Metadata</h2>
+        <pre>${JSON.stringify(meta, null, 2)}</pre>
+        <h2>Binary</h2>
+        <div><b>mimeType:</b> <code>${mime}</code></div>
+        <div><b>bytes:</b> <code>${size}</code></div>
+        <div><b>head (hex, 16 bytes):</b> <code>${headHex}</code></div>
+        <div style="margin-top: 12px; display: flex; gap: 12px; flex-wrap: wrap;">
+          <a href="/api/documents/images/${imageId}" target="_blank">Open binary</a>
+          <a href="/api/documents/images/${imageId}/download">Download</a>
+          <a href="/api/documents/images/${imageId}/metadata" target="_blank">Metadata JSON</a>
+        </div>
+      </div>
+      <div class="card" style="min-width: 320px; flex: 2;">
+        <h2>Preview</h2>
+        <img src="data:${mime};base64,${base64}" alt="${imageId}" />
+      </div>
+    </div>
+  </body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(html);
+  } catch (error) {
+    logError(`Failed to debug image ${imageId}`, error);
+    return res.status(500).send(error instanceof Error ? error.message : String(error));
+  }
+});
+
 /**
  * GET /api/documents
  * Returns summary information about ingested documents

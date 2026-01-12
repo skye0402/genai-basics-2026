@@ -105,7 +105,20 @@ async def _get_agent() -> tuple[Any, Optional[MultiServerMCPClient]]:
             - **web_search**: Quick web search for recent news
             - **web_research**: Deep research for comprehensive analysis
             - **search_document_content**: Search ingested PDF documents (RAG)
+            - **get_document_images**: Get images from documents to include in responses
             - **get_time_and_place**: Get current time and location context
+            
+            ## Including Images in Responses
+            When search results contain `image_ids` in metadata, relevant charts/tables/diagrams are available.
+            To include an image:
+            1. Use `get_document_images` with the document_id to see available images
+            2. Include relevant images using markdown: ![description](image:imageId)
+            
+            **When to include images:**
+            - Charts showing financial data, trends, or comparisons
+            - Tables with key metrics or figures
+            - Diagrams explaining business models or strategies
+            - Any visual that helps answer the user's question
             
             ## Language Guidelines
             - **Match the user's language**: If the user writes in English, respond in English.
@@ -119,6 +132,7 @@ async def _get_agent() -> tuple[Any, Optional[MultiServerMCPClient]]:
             3. Cite specific numbers and sources
             4. Be objective, concise, and risk-aware
             5. Make good use of tools - better more tool calls than less
+            6. Include relevant images when they help illustrate your response
             
             ## Deal Memo Format (when requested)
             If the user asks for a formal Japanese Deal Memo (案件概要書), use this structure:

@@ -272,7 +272,9 @@ export class DocumentIngestionService {
 
           // Use text with images interleaved
           const content = page.textWithImages.trim();
-          if (!content) continue;
+          // If a page has images but no extractable text, we still want to store a chunk
+          // so that downstream search results can reference image_ids.
+          if (!content && page.images.length === 0) continue;
 
           pageDocuments.push(
             new Document({
@@ -292,6 +294,13 @@ export class DocumentIngestionService {
 
         if (pageDocuments.length > 0) {
           console.log(`  ✅ Extracted ${pageDocuments.length} pages with ${allImages.length} images`);
+          // Debug: log pages that have images
+          for (const doc of pageDocuments) {
+            const meta = doc.metadata as Record<string, any>;
+            if (meta.has_images) {
+              console.log(`  📸 Page ${meta.page_number} has ${meta.image_count} image(s): ${JSON.stringify(meta.image_ids)}`);
+            }
+          }
           return { documents: pageDocuments, images: allImages };
         }
       } catch (imgErr) {
@@ -1003,6 +1012,11 @@ ${preview}
           total_pages: sourceMetadata?.total_pages || baseMetadata.total_pages || 1,
         };
 
+        // Debug: log if this chunk has image metadata
+        if (sourceMetadata?.has_images) {
+          console.log(`  🔍 Chunk ${idx} (page ${sourceMetadata.page_number}) has image metadata: image_ids=${JSON.stringify(sourceMetadata.image_ids)}`);
+        }
+
         const pageContentForEmbedding = baseMetadata.title
           ? `Title: ${baseMetadata.title}\n\n${chunk.pageContent}`
           : chunk.pageContent;
@@ -1327,6 +1341,33 @@ ${preview}
     });
   }
 
+  async getChunkById(chunkId: string): Promise<{ id: string; content: string; metadata: Record<string, any> } | null> {
+    if (!chunkId) {
+      throw new Error('chunkId is required');
+    }
+
+    await this.initHanaConnection();
+
+    const sql = `
+      SELECT "id", "content", "metadata"
+      FROM "${this.config.vectorTableName}"
+      WHERE "id" = ?
+    `;
+
+    const rows = await this.executePreparedSQL(sql, [chunkId]);
+    if (!rows || rows.length === 0) return null;
+
+    const row = rows[0];
+    const rawMetadata = row.METADATA ?? row.metadata ?? '{}';
+    const parsedMetadata = typeof rawMetadata === 'string' ? JSON.parse(rawMetadata) : JSON.parse(rawMetadata.toString('utf-8'));
+
+    return {
+      id: row.ID ?? row.id ?? chunkId,
+      content: row.CONTENT ?? row.content ?? '',
+      metadata: parsedMetadata,
+    };
+  }
+
   /**
    * Hybrid two-step search: first search headers by summary, then search chunks within top documents.
    */
@@ -1456,6 +1497,7 @@ ${preview}
     document_id: string;
     tenant_id?: string;
     chunks_deleted: number;
+    images_deleted: number;
   }> {
     if (!documentId) {
       throw new Error('documentId is required');
@@ -1465,6 +1507,7 @@ ${preview}
 
     // --- Path 1: try header-based deletion using source_filename + tenant ---
     let totalChunksDeleted = 0;
+    let totalImagesDeleted = 0;
     let resolvedTenantId: string | undefined = tenantId;
 
     try {
@@ -1510,6 +1553,12 @@ ${preview}
           await this.executePreparedSQL(deleteChunksSQL, [...deleteParamsBase]);
           totalChunksDeleted += chunkCount;
 
+          try {
+            totalImagesDeleted = await imageStorageService.deleteImagesForDocument(documentId);
+          } catch (ignoreImageDeleteError) {
+            console.warn('Image cleanup during deletion failed (ignored):', ignoreImageDeleteError);
+          }
+
           const deleteHeaderSQL = `
             DELETE FROM "${this.config.headerTableName}"
             WHERE "tenant_id" = ? AND "document_id" = ?
@@ -1520,6 +1569,7 @@ ${preview}
             document_id: documentId,
             tenant_id: resolvedTenantId,
             chunks_deleted: totalChunksDeleted,
+            images_deleted: totalImagesDeleted,
           };
         }
       }
@@ -1557,6 +1607,12 @@ ${preview}
     await this.executePreparedSQL(deleteByIdSQL, [...docIdParams]);
     totalChunksDeleted += chunkCountById;
 
+    try {
+      totalImagesDeleted = await imageStorageService.deleteImagesForDocument(documentId);
+    } catch (ignoreImageDeleteError) {
+      console.warn('Image cleanup during fallback deletion failed (ignored):', ignoreImageDeleteError);
+    }
+
     // Try to clean up any header rows for this document as well, but don't fail if table/rows are missing
     try {
       const deleteHeaderByIdSQL = `
@@ -1573,6 +1629,7 @@ ${preview}
       document_id: documentId,
       tenant_id: tenantId,
       chunks_deleted: totalChunksDeleted,
+      images_deleted: totalImagesDeleted,
     };
   }
 }

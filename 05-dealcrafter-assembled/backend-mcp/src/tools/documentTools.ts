@@ -8,6 +8,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
 import { getDocumentIngestionService } from '../services/documentIngestionService.js';
+import { imageStorageService } from '../services/imageStorageService.js';
 import { logInfo } from '../utils/logger.js';
 
 /**
@@ -238,6 +239,83 @@ export function registerDocumentSearchTool(server: McpServer): void {
         };
       } catch (error) {
         console.error('get_document_segment failed:', error);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  success: false,
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+    },
+  );
+
+  // 4) Get document images: retrieve image metadata for a document
+  //    Allows LLM to discover and reference images in responses
+  server.tool(
+    'get_document_images',
+    'Get metadata for all images extracted from a document. Returns image IDs, descriptions, page numbers, and dimensions. Use this to discover relevant images that can be included in your response. To display an image, use markdown syntax: ![description](image:imageId)',
+    {
+      document_id: z.string().describe('Document ID to get images for'),
+      page_number: z
+        .number()
+        .int()
+        .optional()
+        .describe('Optional: filter to images from a specific page (1-based)'),
+    },
+    async ({ document_id, page_number }) => {
+      logInfo(
+        `Tool: get_document_images | document_id=${document_id}, page_number=${page_number ?? 'all'}`,
+      );
+
+      try {
+        const images = await imageStorageService.listImagesForDocument(document_id);
+        
+        // Filter by page if specified
+        const filtered = page_number 
+          ? images.filter(img => img.pageNumber === page_number)
+          : images;
+
+        const formatted = filtered.map((img) => ({
+          image_id: img.imageId,
+          page_number: img.pageNumber,
+          description: img.description,
+          width: img.width,
+          height: img.height,
+          mime_type: img.mimeType,
+          // Include markdown syntax hint for easy copy-paste
+          markdown_syntax: `![${img.description?.slice(0, 50) || 'Image'}](image:${img.imageId})`,
+        }));
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  success: true,
+                  document_id,
+                  image_count: formatted.length,
+                  images: formatted,
+                  usage_hint: 'To display an image in your response, use: ![description](image:imageId)',
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (error) {
+        console.error('get_document_images failed:', error);
         return {
           content: [
             {

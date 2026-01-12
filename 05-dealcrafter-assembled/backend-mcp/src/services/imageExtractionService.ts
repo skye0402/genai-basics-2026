@@ -47,7 +47,10 @@ const MIN_IMAGE_SIZE = 50; // Skip images smaller than 50x50 (likely icons/noise
 // Test mode: limit number of pages to process for image extraction
 // Set MAX_IMAGE_PAGES in .env.local to limit (e.g., 3 for testing)
 // If not set or 0, all pages are processed
-const MAX_IMAGE_PAGES = parseInt(process.env.MAX_IMAGE_PAGES || '0', 10);
+// NOTE: Read at runtime to ensure dotenv has loaded
+function getMaxImagePages(): number {
+  return parseInt(process.env.MAX_IMAGE_PAGES || '0', 10);
+}
 
 /**
  * Image analysis response structure
@@ -56,6 +59,49 @@ interface ImageAnalysisResult {
   description: string;
   shouldEmbed: boolean;
   reason: string;
+}
+
+function normalizeToRgba(data: Uint8Array | Uint8ClampedArray, width: number, height: number): Uint8ClampedArray {
+  const pixelCount = width * height;
+  const expectedRgbaLen = pixelCount * 4;
+  const expectedRgbLen = pixelCount * 3;
+  const expectedGrayLen = pixelCount;
+
+  if (data.length === expectedRgbaLen) {
+    return data instanceof Uint8ClampedArray ? data : new Uint8ClampedArray(data);
+  }
+
+  const out = new Uint8ClampedArray(expectedRgbaLen);
+
+  if (data.length === expectedRgbLen) {
+    for (let i = 0, j = 0; i < expectedRgbaLen && j < expectedRgbLen; i += 4, j += 3) {
+      out[i] = data[j] ?? 0;
+      out[i + 1] = data[j + 1] ?? 0;
+      out[i + 2] = data[j + 2] ?? 0;
+      out[i + 3] = 255;
+    }
+    return out;
+  }
+
+  if (data.length === expectedGrayLen) {
+    for (let i = 0, j = 0; i < expectedRgbaLen && j < expectedGrayLen; i += 4, j += 1) {
+      const v = data[j] ?? 0;
+      out[i] = v;
+      out[i + 1] = v;
+      out[i + 2] = v;
+      out[i + 3] = 255;
+    }
+    return out;
+  }
+
+  const min = Math.min(data.length, expectedRgbaLen);
+  for (let i = 0; i < min; i++) {
+    out[i] = data[i] ?? 0;
+  }
+  for (let i = 3; i < expectedRgbaLen; i += 4) {
+    if (out[i] === 0) out[i] = 255;
+  }
+  return out;
 }
 
 /**
@@ -177,11 +223,13 @@ export class ImageExtractionService {
     const totalPages = pdfDoc.numPages;
 
     // Apply MAX_IMAGE_PAGES limit if set (for testing)
-    const pagesToProcess = MAX_IMAGE_PAGES > 0 ? Math.min(MAX_IMAGE_PAGES, totalPages) : totalPages;
+    // Read at runtime to ensure dotenv has loaded
+    const maxImagePages = getMaxImagePages();
+    const pagesToProcess = maxImagePages > 0 ? Math.min(maxImagePages, totalPages) : totalPages;
     
-    if (MAX_IMAGE_PAGES > 0 && totalPages > MAX_IMAGE_PAGES) {
-      onProgress?.(`⚠️ TEST MODE: Processing only ${pagesToProcess} of ${totalPages} pages for images (MAX_IMAGE_PAGES=${MAX_IMAGE_PAGES})`);
-      console.log(`⚠️ TEST MODE: Limiting image extraction to ${pagesToProcess} pages (MAX_IMAGE_PAGES=${MAX_IMAGE_PAGES})`);
+    if (maxImagePages > 0 && totalPages > maxImagePages) {
+      onProgress?.(`⚠️ TEST MODE: Processing only ${pagesToProcess} of ${totalPages} pages for images (MAX_IMAGE_PAGES=${maxImagePages})`);
+      console.log(`⚠️ TEST MODE: Limiting image extraction to ${pagesToProcess} pages (MAX_IMAGE_PAGES=${maxImagePages})`);
     } else {
       onProgress?.(`Extracting images from ${pagesToProcess} pages...`);
     }
@@ -373,7 +421,7 @@ export class ImageExtractionService {
    * Create a simple PNG from RGBA data
    * Note: This is a simplified implementation. For production, consider using sharp or canvas.
    */
-  private async createPngFromRgba(data: Uint8ClampedArray, width: number, height: number): Promise<Buffer> {
+  private async createPngFromRgba(data: Uint8Array | Uint8ClampedArray, width: number, height: number): Promise<Buffer> {
     // For now, we'll use a simple approach - just store as raw data
     // In production, you'd want to use a proper image library like sharp
     
@@ -383,10 +431,11 @@ export class ImageExtractionService {
       const canvas = createCanvas(width, height);
       const ctx = canvas.getContext('2d');
       const imageData = ctx.createImageData(width, height);
-      
-      // Copy data
-      for (let i = 0; i < data.length; i++) {
-        imageData.data[i] = data[i];
+
+      const rgba = normalizeToRgba(data, width, height);
+
+      for (let i = 0; i < rgba.length; i++) {
+        imageData.data[i] = rgba[i] ?? 0;
       }
       
       ctx.putImageData(imageData, 0, 0);

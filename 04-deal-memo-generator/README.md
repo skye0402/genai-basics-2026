@@ -84,9 +84,8 @@ uv run python memo_generator.py
 ### Exercise 4a: Load the System Prompt
 
 ```python
-def load_system_prompt() -> str:
-    # TODO: Load the Japanese system prompt from prompts/deal_memo_system_prompt.md
-    # TODO: Replace {COMPANY_NAME} and {TICKER} placeholders
+def get_system_prompt() -> str:
+    # TODO: Format the system prompt with company details
 ```
 
 ### Exercise 4b: Run the Full Workflow

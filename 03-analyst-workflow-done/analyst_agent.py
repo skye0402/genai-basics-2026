@@ -1,6 +1,6 @@
-"""Part 3: LangGraph Analyst Workflow with MCP Integration (Complete)
+"""Part 3: LangGraph Analyst Workflow (Complete)
 
-This script implements a multi-step analysis workflow using LangGraph with MCP tools.
+This script implements a multi-step analysis workflow using LangGraph.
 
 Run with:
     uv run python analyst_agent.py
@@ -18,7 +18,6 @@ from langchain_hana import HanaDB
 from langgraph.graph import StateGraph, START, END
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from langchain_mcp_adapters.tools import load_mcp_tools
 from gen_ai_hub.proxy.langchain.init_models import init_llm, init_embedding_model
 
 # Load environment variables from the repo root .env file
@@ -67,6 +66,40 @@ def get_hana_connection():
     )
 
 
+async def _async_get_stock_info(ticker: str) -> dict:
+    """Async helper function for getting stock info via direct MCP call."""
+    server_params = StdioServerParameters(
+        command=sys.executable,
+        args=[str(Path(__file__).parent.parent / "02-data-connector-mcp" / "mcp_server.py")],
+    )
+    
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            
+            # Direct MCP tool call without langchain adapter
+            result = await session.call_tool("get_stock_info", {"ticker": ticker})
+            
+            return result.content if hasattr(result, 'content') and isinstance(result.content, dict) else {"error": "Failed to get stock data"}
+
+
+async def _async_search_news(query: str, limit: int = 5) -> str:
+    """Async helper function for searching news via direct MCP call."""
+    server_params = StdioServerParameters(
+        command=sys.executable,
+        args=[str(Path(__file__).parent.parent / "02-data-connector-mcp" / "mcp_server.py")],
+    )
+    
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            
+            # Direct MCP tool call without langchain adapter
+            result = await session.call_tool("search_market_news", {"query": query, "limit": limit})
+            
+            return result.content if hasattr(result, 'content') and isinstance(result.content, str) else "No news found"
+
+
 # =============================================================================
 # NODE IMPLEMENTATIONS
 # =============================================================================
@@ -76,32 +109,16 @@ async def fetch_stock_node(state: AnalystState) -> dict:
     print(f"📊 Step 1: Fetching stock data for {state['ticker']}...")
     
     try:
-        # Configure MCP server connection
-        server_params = StdioServerParameters(
-            command=sys.executable,
-            args=[str(Path(__file__).parent.parent / "02-data-connector-mcp" / "mcp_server.py")],
-        )
+        stock_info = await _async_get_stock_info(state["ticker"])
         
-        # Connect to MCP server and get stock data
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                tools = await load_mcp_tools(session)
-                
-                # Find and use stock tool
-                stock_tool = next(tool for tool in tools if tool.name == "get_stock_info")
-                result = await stock_tool.ainvoke({"ticker": state["ticker"]})
-                
-                stock_info = result if isinstance(result, dict) else {"error": "Failed to get stock data"}
-                
-                if "price" in stock_info and "currency" in stock_info and stock_info.get("change_percent") is not None:
-                    change_str = f"▲{stock_info['change_percent']:.1f}%" if stock_info.get('change_percent', 0) >= 0 else f"▼{abs(stock_info['change_percent']):.1f}%"
-                    print(f"   ✅ Price: {stock_info['currency']}{stock_info['price']} ({change_str})")
-                else:
-                    print(f"   ✅ Retrieved stock data")
-                
-                return {"stock_info": stock_info, "step_count": state["step_count"] + 1}
-                
+        if "price" in stock_info and "currency" in stock_info and stock_info.get("change_percent") is not None:
+            change_str = f"▲{stock_info['change_percent']:.1f}%" if stock_info.get('change_percent', 0) >= 0 else f"▼{abs(stock_info['change_percent']):.1f}%"
+            print(f"   ✅ Price: {stock_info['currency']}{stock_info['price']} ({change_str})")
+        else:
+            print(f"   ✅ Retrieved stock data")
+        
+        return {"stock_info": stock_info, "step_count": state["step_count"] + 1}
+        
     except Exception as e:
         print(f"   ⚠️ Error fetching stock via MCP: {e}")
         return {"stock_info": {"error": str(e)}, "step_count": state["step_count"] + 1}
@@ -112,34 +129,18 @@ async def search_news_node(state: AnalystState) -> dict:
     print(f"📰 Step 2: Searching news for {state['company_name']}...")
     
     try:
-        # Configure MCP server connection
-        server_params = StdioServerParameters(
-            command=sys.executable,
-            args=[str(Path(__file__).parent.parent / "02-data-connector-mcp" / "mcp_server.py")],
-        )
+        query = f"{state['company_name']} financial news investment analysis recent developments"
+        news_results = await _async_search_news(query, 5)
         
-        # Connect to MCP server and search news
-        async with stdio_client(server_params) as (read, write):
-            async with ClientSession(read, write) as session:
-                await session.initialize()
-                tools = await load_mcp_tools(session)
-                
-                # Find and use news search tool
-                news_tool = next(tool for tool in tools if tool.name == "search_market_news")
-                query = f"{state['company_name']} financial news investment analysis recent developments"
-                result = await news_tool.ainvoke({"query": query, "limit": 5})
-                
-                news_results = result if isinstance(result, str) else "No news found"
-                print(f"   ✅ Found news articles")
-                
-                return {"news_results": news_results, "step_count": state["step_count"] + 1}
-                
+        print(f"   ✅ Found news articles")
+        return {"news_results": news_results, "step_count": state["step_count"] + 1}
+        
     except Exception as e:
         print(f"   ⚠️ Error searching news via MCP: {e}")
         return {"news_results": f"Error: {str(e)}", "step_count": state["step_count"] + 1}
 
 
-def retrieve_docs_node(state: AnalystState) -> dict:
+async def retrieve_docs_node(state: AnalystState) -> dict:
     """Retrieve relevant documents from HANA vector store."""
     print(f"📄 Step 3: Retrieving documents...")
     
@@ -166,7 +167,7 @@ def retrieve_docs_node(state: AnalystState) -> dict:
         return {"doc_context": f"Error: {str(e)}", "step_count": state["step_count"] + 1}
 
 
-def analyze_node(state: AnalystState) -> dict:
+async def analyze_node(state: AnalystState) -> dict:
     """Generate analysis using LLM."""
     print(f"🧠 Step 4: Analyzing...")
     
@@ -240,7 +241,7 @@ async def main():
     
     print()
     
-    # Run the workflow using async invoke since we have async nodes
+    # Run the workflow using async invoke
     result = await agent.ainvoke({
         "company_name": COMPANY_NAME,
         "ticker": TICKER,

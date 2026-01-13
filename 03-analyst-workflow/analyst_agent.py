@@ -1,7 +1,7 @@
-"""Part 3: LangGraph Analyst Workflow with MCP Integration
+"""Part 3: LangGraph Analyst Workflow (Exercise)
 
 This script implements a multi-step analysis workflow using LangGraph.
-The graph structure is provided - you implement the node logic using MCP tools.
+The working implementation is provided as comments - uncomment and complete the TODOs.
 
 Run with:
     uv run python analyst_agent.py
@@ -47,175 +47,180 @@ class AnalystState(TypedDict):
 
 
 # =============================================================================
-# NODE IMPLEMENTATIONS (EXERCISES - IMPLEMENT THESE)
+# HELPER FUNCTIONS
+# =============================================================================
+
+def get_hana_connection():
+    """Create a connection to SAP HANA Cloud."""
+# Hint: from hdbcli import dbapi
+# Hint:
+#     return dbapi.connect(
+#         address=os.getenv("HANA_DB_ADDRESS"),
+#         port=int(os.getenv("HANA_DB_PORT", "443")),
+#         user=os.getenv("HANA_DB_USER"),
+#         password=os.getenv("HANA_DB_PASSWORD"),
+#         autocommit=True,
+#         sslValidateCertificate=False,
+#     )
+
+
+async def _async_get_stock_info(ticker: str) -> dict:
+    """Async helper function for getting stock info via direct MCP call."""
+# Hint: from mcp import ClientSession, StdioServerParameters
+# Hint: from mcp.client.stdio import stdio_client
+# Hint:
+#    server_params = StdioServerParameters(
+#        command=sys.executable,
+#        args=[str(Path(__file__).parent.parent / "02-data-connector-mcp" / "mcp_server.py")],
+#    )
+#    
+#    async with stdio_client(server_params) as (read, write):
+#        async with ClientSession(read, write) as session:
+#            await session.initialize()
+#            
+#            # Direct MCP tool call without langchain adapter
+#            result = await session.call_tool("get_stock_info", {"ticker": ticker})
+#            
+#            return result.content if hasattr(result, 'content') and isinstance(result.content, dict) else {"error": "Failed to get stock data"}
+
+async def _async_search_news(query: str, limit: int = 5) -> str:
+    """Async helper function for searching news via direct MCP call."""
+# Hint:
+#     server_params = StdioServerParameters(
+#         command=sys.executable,
+#         args=[str(Path(__file__).parent.parent / "02-data-connector-mcp" / "mcp_server.py")],
+#     )
+#     
+#     async with stdio_client(server_params) as (read, write):
+#         async with ClientSession(read, write) as session:
+#             await session.initialize()
+#             
+#             # Direct MCP tool call without langchain adapter
+#             result = await session.call_tool("search_market_news", {"query": query, "limit": limit})
+#             
+#             return result.content if hasattr(result, 'content') and isinstance(result.content, str) else "No news found"
+
+
+# =============================================================================
+# NODE IMPLEMENTATIONS
 # =============================================================================
 
 async def fetch_stock_node(state: AnalystState) -> dict:
-    """EXERCISE 3a: Fetch stock data using MCP tools.
-    
-    TODO:
-    1. Connect to MCP server and get stock tool
-    2. Use the get_stock_info tool with state["ticker"]
-    3. Return {"stock_info": {...}, "step_count": state["step_count"] + 1}
-    """
+    """EXERCISE 3a: Fetch stock data using MCP tools."""
     print(f"📊 Step 1: Fetching stock data for {state['ticker']}...")
     
-    # ==========================================================================
-    # TODO: Import MCP client components
-    # Hint: from mcp import ClientSession, StdioServerParameters
-    # Hint: from mcp.client.stdio import stdio_client
-    # Hint: from langchain_mcp_adapters.tools import load_mcp_tools
-    #
-    # TODO: Configure MCP server connection
-    # Hint: server_params = StdioServerParameters(
-    #     command=sys.executable,
-    #     args=[str(Path(__file__).parent.parent / "02-data-connector-mcp" / "mcp_server.py")],
-    # )
-    #
-    # TODO: Connect to MCP server and load tools
-    # Hint: async with stdio_client(server_params) as (read, write):
-    # Hint:     async with ClientSession(read, write) as session:
-    # Hint:         await session.initialize()
-    # Hint:         tools = await load_mcp_tools(session)
-    #
-    # TODO: Find and use stock tool
-    # Hint: stock_tool = next(tool for tool in tools if tool.name == "get_stock_info")
-    # Hint: result = await stock_tool.ainvoke({"ticker": state["ticker"]})
-    #
-    # TODO: Process result and return
-    # Hint: stock_info = result if isinstance(result, dict) else {"error": "Failed to get stock data"}
-    # Hint: if "price" in stock_info and "currency" in stock_info:
-    # Hint:     print(f"   ✅ Price: {stock_info['currency']}{stock_info['price']}")
-    # Hint: return {"stock_info": stock_info, "step_count": state["step_count"] + 1}
-    # ==========================================================================
+    # TODO: Implement the function
+    # Hint:
+    # try:
+    #     stock_info = await _async_get_stock_info(state["ticker"])
+    #     
+    #     if "price" in stock_info and "currency" in stock_info and stock_info.get("change_percent") is not None:
+    #         change_str = f"▲{stock_info['change_percent']:.1f}%" if stock_info.get('change_percent', 0) >= 0 else f"▼{abs(stock_info['change_percent']):.1f}%"
+    #         print(f"   ✅ Price: {stock_info['currency']}{stock_info['price']} ({change_str})")
+    #     else:
+    #         print(f"   ✅ Retrieved stock data")
+    #     
+    #     return {"stock_info": stock_info, "step_count": state["step_count"] + 1}
+    #     
+    # except Exception as e:
+    #     print(f"   ⚠️ Error fetching stock via MCP: {e}")
+    #     return {"stock_info": {"error": str(e)}, "step_count": state["step_count"] + 1}
     
-    raise NotImplementedError("Exercise 3a: Implement fetch_stock_node with MCP")
+    raise NotImplementedError("TODO: Uncomment the implementation above")
 
 
 async def search_news_node(state: AnalystState) -> dict:
-    """EXERCISE 3b: Search for market news using MCP tools.
-    
-    TODO:
-    1. Connect to MCP server and get news search tool
-    2. Use the search_market_news tool with company name
-    3. Return {"news_results": "...", "step_count": ...}
-    """
+    """EXERCISE 3b: Search for market news using MCP tools."""
     print(f"📰 Step 2: Searching news for {state['company_name']}...")
     
-    # ==========================================================================
-    # TODO: Import MCP client components (if not already imported)
-    # Hint: from mcp import ClientSession, StdioServerParameters
-    # Hint: from mcp.client.stdio import stdio_client
-    # Hint: from langchain_mcp_adapters.tools import load_mcp_tools
-    #
-    # TODO: Configure MCP server connection
-    # Hint: server_params = StdioServerParameters(
-    #     command=sys.executable,
-    #     args=[str(Path(__file__).parent.parent / "02-data-connector-mcp" / "mcp_server.py")],
-    # )
-    #
-    # TODO: Connect to MCP server and load tools
-    # Hint: async with stdio_client(server_params) as (read, write):
-    # Hint:     async with ClientSession(read, write) as session:
-    # Hint:         await session.initialize()
-    # Hint:         tools = await load_mcp_tools(session)
-    #
-    # TODO: Find and use news search tool
-    # Hint: news_tool = next(tool for tool in tools if tool.name == "search_market_news")
-    # Hint: query = f"{state['company_name']} financial news investment analysis"
-    # Hint: result = await news_tool.ainvoke({"query": query, "limit": 5})
-    #
-    # TODO: Process result and return
-    # Hint: news_results = result if isinstance(result, str) else "No news found"
-    # Hint: print(f"   ✅ Found news articles")
-    # Hint: return {"news_results": news_results, "step_count": state["step_count"] + 1}
-    # ==========================================================================
+    # TODO: Implement the function
+    # Hint:
+    # try:
+    #     query = f"{state['company_name']} financial news investment analysis recent developments"
+    #     news_results = await _async_search_news(query, 5)
+    #     
+    #     print(f"   ✅ Found news articles")
+    #     return {"news_results": news_results, "step_count": state["step_count"] + 1}
+    #     
+    # except Exception as e:
+    #     print(f"   ⚠️ Error searching news via MCP: {e}")
+    #     return {"news_results": f"Error: {str(e)}", "step_count": state["step_count"] + 1}
     
-    raise NotImplementedError("Exercise 3b: Implement search_news_node with MCP")
+    raise NotImplementedError("TODO: Uncomment the implementation above")
 
 
-def retrieve_docs_node(state: AnalystState) -> dict:
-    """EXERCISE 3c: Retrieve relevant documents from HANA vector store.
-    
-    TODO:
-    1. Connect to HANA
-    2. Query vector store with the user's query
-    3. Return {"doc_context": "...", "step_count": ...}
-    """
+async def retrieve_docs_node(state: AnalystState) -> dict:
+    """EXERCISE 3c: Retrieve relevant documents from HANA vector store."""
     print(f"📄 Step 3: Retrieving documents...")
     
-    # ==========================================================================
-    # TODO: Import required modules
-    # Hint: from hdbcli import dbapi
+    # TODO: Implement the function
     # Hint: from langchain_hana import HanaDB
-    # Hint: from gen_ai_hub.proxy.langchain.init_models import init_embedding_model
-    #
-    # TODO: Connect to HANA
-    # Hint: connection = dbapi.connect(
-    #     address=os.getenv("HANA_DB_ADDRESS"),
-    #     port=int(os.getenv("HANA_DB_PORT", "443")),
-    #     user=os.getenv("HANA_DB_USER"),
-    #     password=os.getenv("HANA_DB_PASSWORD"),
-    #     autocommit=True,
-    #     sslValidateCertificate=False,
-    # )
-    #
-    # TODO: Create vector store and retriever
-    # Hint: embeddings = init_embedding_model(EMBEDDING_MODEL)
-    # Hint: db = HanaDB(embedding=embeddings, connection=connection, table_name=TABLE_NAME)
-    # Hint: retriever = db.as_retriever(search_kwargs={"k": 5})
-    #
-    # TODO: Retrieve and format context
-    # Hint: docs = retriever.invoke(state["query"])
-    # Hint: context = "\n\n---\n\n".join(doc.page_content for doc in docs)
-    # Hint: print(f"   ✅ Retrieved {len(docs)} relevant chunks")
-    # Hint: return {"doc_context": context, "step_count": state["step_count"] + 1}
-    # ==========================================================================
+    # Hint:
+    # try:
+    #     connection = get_hana_connection()
+    #     embeddings = init_embedding_model(EMBEDDING_MODEL)
+    #     db = HanaDB(embedding=embeddings, connection=connection, table_name=TABLE_NAME)
+    #     retriever = db.as_retriever(search_kwargs={"k": 5})
+    #     
+    #     # Combine company name and query for better retrieval
+    #     search_query = f"{state['company_name']} {state['query']}"
+    #     docs = retriever.invoke(search_query)
+    #     
+    #     if docs:
+    #         context = "\n\n---\n\n".join(doc.page_content for doc in docs)
+    #         print(f"   ✅ Retrieved {len(docs)} relevant chunks")
+    #     else:
+    #         context = "No relevant documents found in the database."
+    #         print(f"   ⚠️ No documents found")
+    #     
+    #     return {"doc_context": context, "step_count": state["step_count"] + 1}
+    # except Exception as e:
+    #     print(f"   ⚠️ Error retrieving docs: {e}")
+    #     return {"doc_context": f"Error: {str(e)}", "step_count": state["step_count"] + 1}
     
-    raise NotImplementedError("Exercise 3c: Implement retrieve_docs_node")
+    raise NotImplementedError("TODO: Uncomment the implementation above")
 
 
-def analyze_node(state: AnalystState) -> dict:
-    """EXERCISE 3d: Generate analysis using LLM.
-    
-    TODO:
-    1. Combine all gathered data into a prompt
-    2. Call the LLM to generate analysis
-    3. Return {"analysis": "..."}
-    """
+async def analyze_node(state: AnalystState) -> dict:
+    """EXERCISE 3d: Generate analysis using LLM."""
     print(f"🧠 Step 4: Analyzing...")
     
-    # ==========================================================================
-    # TODO: Import and initialize LLM
-    # Hint: from gen_ai_hub.proxy.langchain.init_models import init_llm
-    # Hint: llm = init_llm(MODEL, max_tokens=MAX_TOKENS, temperature=TEMPERATURE)
-    #
-    # TODO: Create analysis prompt
-    # Hint: prompt = f"""You are a financial analyst. Analyze {state['company_name']} ({state['ticker']}).
-    #
-    # STOCK DATA:
-    # {state['stock_info']}
-    #
-    # RECENT NEWS:
-    # {state['news_results']}
-    #
-    # INTERNAL DOCUMENTS:
-    # {state['doc_context']}
-    #
-    # USER QUESTION: {state['query']}
-    #
-    # Provide a comprehensive analysis covering:
-    # 1. Current market position
-    # 2. Key risks and opportunities
-    # 3. Your assessment
-    # """
-    #
-    # TODO: Generate and return analysis
-    # Hint: response = llm.invoke(prompt)
-    # Hint: return {"analysis": response.content}
-    # ==========================================================================
+    # TODO: Implement the function
+    # Hint: from gen_ai_hub.proxy.langchain.init_models import init_llm, init_embedding_model
+    # Hint:
+    # llm = init_llm(MODEL, max_tokens=MAX_TOKENS, temperature=TEMPERATURE)
+    # 
+    # # Format stock info for prompt
+    # stock_str = "\n".join(f"  - {k}: {v}" for k, v in state["stock_info"].items() if v is not None)
+    # 
+    # prompt = f"""You are a senior financial analyst. Analyze {state['company_name']} ({state['ticker']}).
+
+# === CURRENT STOCK DATA ===
+# {stock_str}
+
+# === RECENT NEWS ===
+# {state['news_results']}
+
+# === INTERNAL DOCUMENTS ===
+# {state['doc_context'][:3000]}
+
+# === USER QUESTION ===
+# {state['query']}
+
+# Provide a comprehensive analysis covering:
+# 1. **Executive Summary** - Key takeaways in 3 bullets
+# 2. **Market Position** - Current standing and trends
+# 3. **Financial Health** - Based on available data
+# 4. **Risks** - Key concerns and challenges
+# 5. **Opportunities** - Growth potential
+# 6. **Preliminary Assessment** - Your initial recommendation (Buy/Hold/Sell with reasoning)
+
+# Be concise but thorough. Cite specific data points from the provided information."""
+
+#     response = llm.invoke(prompt)
+#     return {"analysis": response.content}
     
-    raise NotImplementedError("Exercise 3d: Implement analyze_node")
+    raise NotImplementedError("TODO: Uncomment the implementation above")
 
 
 # =============================================================================
@@ -243,40 +248,50 @@ agent = agent_builder.compile()
 
 
 # =============================================================================
-# MAIN EXECUTION (PROVIDED - DO NOT MODIFY)
+# MAIN EXECUTION
 # =============================================================================
 
-async def main():
-    """Run the analyst workflow."""
-    
-    print(f"\n🔄 Starting analyst workflow for {COMPANY_NAME} ({TICKER})")
-    print("=" * 60)
-    
-    # Get user query
-    default_query = f"Analyze the investment potential of {COMPANY_NAME}"
-    query = input(f"Enter your analysis question [{default_query}]: ").strip()
-    if not query:
-        query = default_query
-    
-    print()
-    
-    # Run the workflow (using async invoke)
-    result = await agent.ainvoke({
-        "company_name": COMPANY_NAME,
-        "ticker": TICKER,
-        "query": query,
-        "stock_info": {},
-        "news_results": "",
-        "doc_context": "",
-        "analysis": "",
-        "step_count": 0,
-    })
-    
-    # Print results
-    print("\n" + "=" * 60)
-    print("=== ANALYSIS RESULT ===")
-    print("=" * 60)
-    print(result["analysis"])
+# Hint:
+# async def main():
+#     """Run the analyst workflow."""
+#     
+#     print(f"\n🔄 Starting analyst workflow for {COMPANY_NAME} ({TICKER})")
+#     print("=" * 60)
+#     
+#     default_query = f"Analyze the investment potential of {COMPANY_NAME}"
+#     query = input(f"Enter your analysis question [{default_query}]: ").strip()
+#     if not query:
+#         query = default_query
+#     
+#     print()
+#     
+#     # Run the workflow using async invoke
+#     result = await agent.ainvoke({
+#         "company_name": COMPANY_NAME,
+#         "ticker": TICKER,
+#         "query": query,
+#         "stock_info": {},
+#         "news_results": "",
+#         "doc_context": "",
+#         "analysis": "",
+#         "step_count": 0,
+#     })
+#     
+#     print("\n" + "=" * 60)
+#     print("=== ANALYSIS RESULT ===")
+#     print("=" * 60)
+#     print(result["analysis"])
+
+
+def main():
+    """Temporary synchronous main - replace with async version above."""
+    print("TODO: This is a learning exercise!")
+    print("1. Uncomment the required imports at the top")
+    print("2. Uncomment the helper functions") 
+    print("3. Uncomment the node implementations")
+    print("4. Uncomment the async main() function")
+    print("5. Update the if __name__ block to use asyncio.run(main())")
+    print("\nSee the comments throughout the file for the complete implementation!")
 
 
 if __name__ == "__main__":

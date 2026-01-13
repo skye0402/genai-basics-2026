@@ -1,7 +1,7 @@
 [project]
 name = "analyst-workflow"
 version = "0.1.0"
-description = "Part 3: LangGraph workflow for analyst research with MCP integration"
+description = "Part 3: LangGraph workflow for analyst research"
 requires-python = ">=3.12"
 dependencies = [
     "python-dotenv>=1.0.0",
@@ -11,7 +11,6 @@ dependencies = [
     "hdbcli>=2.20.0",
     "yfinance>=0.2.40",
     "mcp>=1.0.0",
-    "langchain-mcp-adapters>=0.1.0",
 ]
 
 [tool.uv]

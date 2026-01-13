@@ -1,14 +1,14 @@
 # Part 3: The Analyst Workflow
 
-> **Goal:** Orchestrate complex multi-step analysis using LangGraph.
+> **Goal:** Orchestrate complex multi-step analysis using LangGraph and MCP tools.
 
 ---
 
 ## 🎯 What You'll Build
 
-A **LangGraph workflow** that chains together multiple analysis steps:
-1. **Fetch Stock** → Get current stock data
-2. **Search News** → Find recent market news
+A **LangGraph workflow** that chains together multiple analysis steps using **MCP (Model Context Protocol) tools**:
+1. **Fetch Stock** → Get current stock data via MCP tools
+2. **Search News** → Find recent market news via MCP tools
 3. **Retrieve Docs** → Query ingested PDFs via RAG
 4. **Analyze** → Generate a comprehensive analysis
 
@@ -45,7 +45,7 @@ uv run python analyst_agent.py
 ```
 ┌─────────────┐     ┌──────────────┐     ┌──────────────┐     ┌───────────────┐
 │ User Query  │────▶│ Fetch Stock  │────▶│ Search News  │────▶│ Retrieve Docs │
-│ {COMPANY}   │     │              │     │              │     │ (RAG)         │
+│ {COMPANY}   │     │  (via MCP)   │     │  (via MCP)   │     │ (RAG)         │
 └─────────────┘     └──────────────┘     └──────────────┘     └───────┬───────┘
                                                                       │
                                                                       ▼
@@ -65,10 +65,9 @@ uv run python analyst_agent.py
 - State schema (`AnalystState`)
 - Graph definition with all nodes and edges
 - Main execution loop
+- MCP helper functions structure
 
 ### What You Implement
-- `fetch_stock_node()` – Call yfinance
-- `search_news_node()` – Call Perplexity
 - `retrieve_docs_node()` – Query HANA vector store
 - `analyze_node()` – Craft prompt and call LLM
 
@@ -78,31 +77,57 @@ uv run python analyst_agent.py
 
 ### Exercise 3a: `fetch_stock_node`
 ```python
-def fetch_stock_node(state: AnalystState) -> dict:
-    # TODO: Use yfinance to get stock info for state["ticker"]
-    # Return: {"stock_info": {...}}
+async def fetch_stock_node(state: AnalystState) -> dict:
+    # TODO: Use await _async_get_stock_info(state["ticker"])
+    # Return: {"stock_info": {...}, "step_count": state["step_count"] + 1}
 ```
 
 ### Exercise 3b: `search_news_node`
 ```python
-def search_news_node(state: AnalystState) -> dict:
-    # TODO: Use Perplexity to search news about state["company_name"]
-    # Return: {"news_results": [...]}
+async def search_news_node(state: AnalystState) -> dict:
+    # TODO: Use await _async_search_news(query, 5)
+    # Return: {"news_results": "...", "step_count": state["step_count"] + 1}
 ```
 
 ### Exercise 3c: `retrieve_docs_node`
 ```python
-def retrieve_docs_node(state: AnalystState) -> dict:
-    # TODO: Query HANA vector store with state["query"]
-    # Return: {"doc_context": "..."}
+async def retrieve_docs_node(state: AnalystState) -> dict:
+    # TODO: Query HANA vector store with HanaDB and retriever
+    # Return: {"doc_context": "...", "step_count": state["step_count"] + 1}
 ```
 
 ### Exercise 3d: `analyze_node`
 ```python
-def analyze_node(state: AnalystState) -> dict:
-    # TODO: Combine stock_info, news_results, doc_context
-    # TODO: Craft a prompt and call the LLM
+async def analyze_node(state: AnalystState) -> dict:
+    # TODO: Combine all data sources and call LLM
     # Return: {"analysis": "..."}
+```
+
+---
+
+## 🔌 MCP Integration
+
+This module integrates with the **Model Context Protocol (MCP)** to access tools from the `02-data-connector-mcp` module:
+
+### MCP Tools Used
+- **`get_stock_info(ticker)`** - Fetches current stock data using yfinance
+- **`search_market_news(query, limit)`** - Searches recent news using Perplexity AI
+
+### MCP Connection Pattern
+The code uses direct MCP tool calls through async helper functions:
+
+```python
+async def _async_get_stock_info(ticker: str) -> dict:
+    server_params = StdioServerParameters(
+        command=sys.executable,
+        args=[str(Path(__file__).parent.parent / "02-data-connector-mcp" / "mcp_server.py")],
+    )
+    
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            result = await session.call_tool("get_stock_info", {"ticker": ticker})
+            return result.content
 ```
 
 ---
@@ -116,16 +141,17 @@ class AnalystState(TypedDict):
     ticker: str
     query: str
     stock_info: dict
-    news_results: list[dict]
+    news_results: str
     doc_context: str
     analysis: str
+    step_count: int
 ```
 
 ### Node Functions
 Each node receives the current state and returns updates:
 ```python
-def my_node(state: AnalystState) -> dict:
-    # Do work...
+async def my_node(state: AnalystState) -> dict:
+    # Do async work...
     return {"field_to_update": new_value}
 ```
 
@@ -136,16 +162,27 @@ graph.add_edge(START, "first_node")
 graph.add_edge("last_node", END)
 ```
 
+### Async Execution
+The workflow runs asynchronously:
+```python
+result = await agent.ainvoke({
+    "company_name": COMPANY_NAME,
+    "ticker": TICKER,
+    "query": query,
+    # ... other state fields
+})
+```
+
 ---
 
 ## ✅ Success Criteria
 
 ```
 🔄 Starting analyst workflow for Sakura Internet (3778.T)
-📊 Step 1: Fetching stock data...
+📊 Step 1: Fetching stock data for 3778.T...
    ✅ Price: ¥5,230 (▲2.3%)
-📰 Step 2: Searching news...
-   ✅ Found 5 relevant articles
+📰 Step 2: Searching news for Sakura Internet...
+   ✅ Found news articles
 📄 Step 3: Retrieving documents...
    ✅ Retrieved 5 relevant chunks
 🧠 Step 4: Analyzing...

@@ -5,12 +5,10 @@ description = "Part 1: PDF ingestion and RAG with SAP HANA Cloud Vector Engine (
 requires-python = ">=3.12"
 dependencies = [
     "python-dotenv>=1.0.0",
-    "sap-ai-sdk-gen[langchain]>=1.0.0",
+    "sap-ai-sdk-gen>=1.0.0",
     "langchain-hana>=0.1.0",
     "langchain-text-splitters>=0.2.0",
     "hdbcli>=2.20.0",
     "pypdf>=4.0.0",
 ]
 
-[tool.uv]
-dev-dependencies = []

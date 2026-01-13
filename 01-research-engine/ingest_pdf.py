@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
+from hdbcli import dbapi
 
 # Load environment variables from the repo root .env file
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -28,15 +29,24 @@ TABLE_NAME = os.getenv("HANA_TABLE_NAME", "DEALCRAFTER_DOCS")
 
 def get_hana_connection():
     """Create a connection to SAP HANA Cloud."""
-    from hdbcli import dbapi
+    # Validate required environment variables
+    address = os.getenv("HANA_DB_ADDRESS")
+    user = os.getenv("HANA_DB_USER")
+    password = os.getenv("HANA_DB_PASSWORD")
+    
+    if not address:
+        raise ValueError("HANA_DB_ADDRESS environment variable is required")
+    if not user:
+        raise ValueError("HANA_DB_USER environment variable is required")
+    if not password:
+        raise ValueError("HANA_DB_PASSWORD environment variable is required")
     
     return dbapi.connect(
-        address=os.getenv("HANA_DB_ADDRESS"),
+        address=address,
         port=int(os.getenv("HANA_DB_PORT", "443")),
-        user=os.getenv("HANA_DB_USER"),
-        password=os.getenv("HANA_DB_PASSWORD"),
+        user=user,
+        password=password,
         autocommit=True,
-        sslValidateCertificate=False,
     )
 
 

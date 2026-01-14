@@ -8,6 +8,7 @@ Run with:
 """
 
 import os
+import sys
 from pathlib import Path
 
 import yfinance as yf
@@ -16,6 +17,10 @@ from hdbcli import dbapi
 from langchain_core.messages import SystemMessage, HumanMessage
 from langchain_hana import HanaDB
 from gen_ai_hub.proxy.langchain.init_models import init_llm, init_embedding_model
+
+# Add parent directory to path to import genai module
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from genai.perplexity_sonar import create_perplexity_client
 
 # Load environment variables from the repo root .env file
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -29,6 +34,7 @@ TICKER = os.getenv("TICKER", "3778.T")
 EMBEDDING_MODEL = os.getenv("LLM_EMBEDDING_MODEL", "text-embedding-3-small")
 TABLE_NAME = os.getenv("HANA_TABLE_NAME", "DEALCRAFTER_DOCS")
 PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "perplexity--sonar-pro")
+PERPLEXITY_DEPLOYMENT_ID = os.getenv("PERPLEXITY_DEPLOYMENT_ID")
 
 
 # =============================================================================
@@ -153,11 +159,17 @@ def gather_stock_data() -> dict:
 
 
 def gather_news() -> str:
-    """Search for recent news using Perplexity."""
+    """Search for recent news using Perplexity Sonar/Sonar Pro."""
     print(f"📰 Searching news for {COMPANY_NAME}...")
     
     try:
-        perplexity = init_llm(PERPLEXITY_MODEL, max_tokens=2000, temperature=0.1)
+        # Create Perplexity client using the dedicated Sonar integration
+        perplexity = create_perplexity_client(
+            model=PERPLEXITY_MODEL,
+            temperature=0.1,
+            max_tokens=2000,
+            deployment_id=PERPLEXITY_DEPLOYMENT_ID
+        )
         
         prompt = f"""Search for the 5 most recent and important news articles about {COMPANY_NAME} ({TICKER}).
 
@@ -175,7 +187,7 @@ For each article, provide:
 
         response = perplexity.invoke(prompt)
         print(f"   ✅ Found recent articles")
-        return response.content
+        return response
     except Exception as e:
         print(f"   ⚠️ Error: {e}")
         return f"News search failed: {str(e)}"

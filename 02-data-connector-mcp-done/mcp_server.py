@@ -10,12 +10,16 @@ Run as stdio server (for agent client):
 """
 
 import os
+import sys
 from pathlib import Path
 
 import yfinance as yf
 from dotenv import load_dotenv
 from mcp.server.fastmcp import FastMCP
-from gen_ai_hub.proxy.langchain.init_models import init_llm
+
+# Add parent directory to path to import genai module
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from genai.perplexity_sonar import create_perplexity_client
 
 # Load environment variables from the repo root .env file
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
@@ -69,8 +73,13 @@ def search_market_news(query: str, limit: int = 5) -> str:
         String containing news summaries with sources
     """
     try:
-        model = os.getenv("PERPLEXITY_MODEL", "perplexity--sonar-pro")
-        perplexity = init_llm(model, max_tokens=4000, temperature=0.1)
+        # Create Perplexity client using the dedicated Sonar integration
+        perplexity = create_perplexity_client(
+            model=os.getenv("PERPLEXITY_MODEL", "perplexity--sonar-pro"),
+            temperature=0.1,
+            max_tokens=4000,
+            deployment_id=os.getenv("PERPLEXITY_DEPLOYMENT_ID")
+        )
         
         prompt = f"""Search for the {limit} most recent news articles about: {query}
 
@@ -82,7 +91,7 @@ For each article, provide:
 Focus on financial and business news. Be concise."""
         
         response = perplexity.invoke(prompt)
-        return response.content
+        return response
     except Exception as e:
         return f"Error searching news: {str(e)}"
 

@@ -115,10 +115,17 @@ Each part has two folders:
 
 ## 📚 Documentation
 
+### Core Technologies
 - [SAP Generative AI Hub SDK](https://help.sap.com/doc/generative-ai-hub-sdk/CLOUD/en-US/index.html)
 - [LangGraph](https://langchain-ai.github.io/langgraph/)
 - [MCP Python SDK](https://modelcontextprotocol.io/docs)
 - [yfinance](https://github.com/ranaroussi/yfinance)
+
+### Perplexity Integration
+- **[Perplexity Sonar Integration Guide](genai/README_PERPLEXITY.md)** - Complete setup and usage documentation
+- Models available: `sonar` and `sonar-pro` (online search capabilities)
+- Integrated via SAP Generative AI Hub using the SDK's "unsupported model" pattern
+- Used in Part 4 for real-time news gathering and market intelligence
 
 ---
 

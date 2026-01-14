@@ -11,6 +11,7 @@ Run as stdio server (for agent client):
 """
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,6 +19,9 @@ from mcp.server.fastmcp import FastMCP
 
 # Load environment variables from the repo root .env file
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
+
+# Add parent directory to path to import genai module
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 # Create an MCP server
 mcp = FastMCP("DealCrafter Tools")
@@ -77,27 +81,29 @@ def search_market_news(query: str, limit: int = 5) -> str:
         String containing news summaries with sources
     """
     # ==========================================================================
-    # TODO 1: Import the LLM initializer
-    # Hint: from gen_ai_hub.proxy.langchain.init_models import init_llm
+    # TODO 1: Import the Perplexity client
+    # Hint: from genai.perplexity_sonar import create_perplexity_client
     #
-    # TODO 2: Get the Perplexity model name from environment
-    # Hint: model = os.getenv("PERPLEXITY_MODEL", "perplexity--sonar-pro")
+    # TODO 2: Create Perplexity client using the dedicated Sonar integration
+    # Hint: perplexity = create_perplexity_client(
+    #     model=os.getenv("PERPLEXITY_MODEL", "perplexity--sonar-pro"),
+    #     temperature=0.1,
+    #     max_tokens=4000,
+    #     deployment_id=os.getenv("PERPLEXITY_DEPLOYMENT_ID")
+    # )
     #
-    # TODO 3: Initialize Perplexity
-    # Hint: perplexity = init_llm(model, max_tokens=4000, temperature=0.1)
-    #
-    # TODO 4: Create a search prompt and invoke Perplexity
+    # TODO 3: Create a search prompt and invoke Perplexity
     # Hint: prompt = f"""Search for the {limit} most recent news articles about: {query}
     # 
     # For each article, provide:
     # - Title
     # - Brief summary (2-3 sentences)
-    # - Source
+    # - Source and date if available
     # 
-    # Focus on financial and business news."""
+    # Focus on financial and business news. Be concise."""
     #
     # Hint: response = perplexity.invoke(prompt)
-    # Hint: return response.content
+    # Hint: return response
     # ==========================================================================
     
     raise NotImplementedError("Exercise 2b: Implement search_market_news with Perplexity")

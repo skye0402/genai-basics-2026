@@ -68,9 +68,9 @@ class PerplexitySonarClient:
             else:
                 deployment = proxy_client.select_deployment(model_name=self.model_name)
             
-            print(f"✅ Found Perplexity deployment: {deployment.deployment_id}")
-            print(f"   Model: {deployment.model_name}")
-            print(f"   Config: {deployment.config_name}")
+            print(f"[OK] Found Perplexity deployment: {deployment.deployment_id}")
+            print(f"     Model: {deployment.model_name}")
+            print(f"     Config: {deployment.config_name}")
             
         except ValueError as e:
             error_msg = (

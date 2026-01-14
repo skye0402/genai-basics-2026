@@ -24,8 +24,6 @@ EMBEDDING_MODEL = os.getenv("LLM_EMBEDDING_MODEL", "text-embedding-3-small")
 TABLE_NAME = os.getenv("HANA_TABLE_NAME", "DEALCRAFTER_DOCS")
 TOP_K = int(os.getenv("RAG_TOP_K", "5"))
 
-COMPANY_NAME = os.getenv("COMPANY_NAME", "the company")
-
 
 def get_hana_connection():
     """Create a connection to SAP HANA Cloud."""
@@ -53,7 +51,7 @@ def get_hana_connection():
 def main():
     """Run an interactive RAG chat session."""
     
-    print(f"📚 Starting RAG Chat for {COMPANY_NAME}")
+    print("📚 Starting RAG Chat")
     print("Type your questions about the ingested documents.")
     print("Press Enter on empty line to exit.\n")
     
@@ -106,7 +104,8 @@ def main():
         #
         # TODO 6: Create a prompt with context
         # Hint: prompt = f"""Based on the following context, answer the question.
-        #
+        # If the answer is not in the context, say so. Where possible cite the source(s) at the end of the answer using footnote numbers.
+        # 
         # Context:
         # {context}
         #

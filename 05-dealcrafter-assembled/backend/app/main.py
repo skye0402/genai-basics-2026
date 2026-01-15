@@ -1,9 +1,12 @@
 """Main FastAPI application entry point."""
-import logging
+import logging, os
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.api import chat, chat_history, audio
+
+load_dotenv()
 
 # Configure logging
 logging.basicConfig(
@@ -23,7 +26,7 @@ logger.info(f"Starting Fiori AI Chat Backend (Log Level: {settings.log_level})")
 # Create FastAPI app
 app = FastAPI(
     title="Fiori AI Chat Backend",
-    description="Backend API for AI-powered financial data analysis",
+    description="Backend API for AI-powered agentic analysis",
     version="0.1.0"
 )
 
@@ -61,3 +64,14 @@ async def health():
         "mock_mode": settings.mock_mode,
         "cors_origins": settings.cors_origins_list
     }
+
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 8000)),
+        reload=True,
+        log_level=settings.log_level.lower()
+    )

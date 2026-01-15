@@ -6,8 +6,7 @@ from collections.abc import Iterable
 from textwrap import dedent
 
 from deepagents import create_deep_agent
-from gen_ai_hub.proxy.core.proxy_clients import get_proxy_client
-from gen_ai_hub.proxy.langchain import init_llm
+from langchain_openai import ChatOpenAI
 from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from app.core.config import settings
@@ -44,12 +43,17 @@ def _get_model() -> Any:
     
     if _model_instance is None:
         logger.info("Initializing LLM model for DeepAgent")
-        proxy_client = get_proxy_client(proxy_version="gen-ai-hub")
-        _model_instance = init_llm(
-            model_name=settings.llm_model,
-            proxy_client=proxy_client,
+
+        base_url = (settings.litellm_proxy_url or "").rstrip("/")
+        if base_url and not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+
+        _model_instance = ChatOpenAI(
+            model=settings.llm_model,
+            api_key=settings.litellm_api_key or None,
+            base_url=base_url or None,
+            temperature=settings.llm_temperature,
             max_tokens=settings.llm_max_tokens,
-            temperature=settings.llm_temperature
         )
         logger.info("LLM model initialized successfully")
     

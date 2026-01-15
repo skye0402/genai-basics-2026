@@ -37,12 +37,9 @@ MOCK_MODE=false
 # Enable agentic mode
 AGENTIC_MODE=true
 
-# Ensure SAP AI Core credentials are configured
-AICORE_BASE_URL=https://api.ai.prod.ap-northeast-1.aws.ml.hana.ondemand.com/v2
-AICORE_AUTH_URL=https://...
-AICORE_CLIENT_ID=...
-AICORE_CLIENT_SECRET=...
-AICORE_RESOURCE_GROUP=...
+# Configure LiteLLM (OpenAI-compatible)
+LITELLM_PROXY_URL=https://your-litellm-host/
+LITELLM_API_KEY=sk-your-key
 ```
 
 ### 2. Start MCP Server
@@ -61,7 +58,7 @@ The MCP server should be accessible at `http://localhost:3001/mcp`.
 
 ```bash
 cd backend
-uv run uvicorn app.main:app --reload
+python dev_setup.py --start-server
 ```
 
 ## Features
@@ -92,7 +89,7 @@ POST /api/chat-stream
 Content-Type: application/json
 
 {
-  "message": "What is the stock price of SAP?",
+  "message": "What is the stock price of a company?",
   "session_id": "session-123"
 }
 ```
@@ -100,7 +97,7 @@ Content-Type: application/json
 ### Response (SSE)
 ```
 event: text
-data: As of today, SAP's stock price is approximately...
+data: As of today, the stock price is approximately...
 
 event: text
 data: $190.50 USD per share on NYSE.
@@ -274,7 +271,7 @@ pnpm dev
 
 **Solution**:
 1. Check `LOG_LEVEL=DEBUG` for detailed error messages
-2. Verify SAP AI Core credentials in `.env`
+2. Verify LiteLLM credentials in `.env`
 3. Ensure `langchain_mcp_adapters` is installed: `uv sync`
 
 ## Migration from Prototype

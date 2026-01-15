@@ -8,7 +8,7 @@ FastAPI backend with DeepAgent for the DealCrafter financial research assistant.
 - **SSE Streaming**: Real-time response streaming to frontend
 - **Session Management**: Persistent chat history with SQLite storage
 - **Multimodal Support**: Image attachments in chat messages
-- **SAP GenAI Hub**: LLM integration via SAP AI Core
+- **LiteLLM Proxy**: LLM integration via OpenAI-compatible LiteLLM endpoint
 
 ## Prerequisites
 
@@ -48,15 +48,28 @@ cp .env.example .env
 ### Required Environment Variables
 
 ```env
-# SAP GenAI Hub Authentication
-AICORE_CLIENT_ID=your-client-id
-AICORE_CLIENT_SECRET=your-client-secret
-AICORE_AUTH_URL=https://your-subdomain.authentication.region.hana.ondemand.com
-AICORE_BASE_URL=https://api.ai.region.aws.ml.hana.ondemand.com
-AICORE_RESOURCE_GROUP=default
+# LiteLLM (OpenAI-compatible)
+LITELLM_PROXY_URL=https://your-litellm-host/
+LITELLM_API_KEY=sk-your-key
+
+# Audio transcription (SAP AI Core)
+AICORE_BASE_URL=https://api.ai.<region>.aws.ml.hana.ondemand.com/v2
+AICORE_AUTH_URL=https://<subdomain>.authentication.<region>.hana.ondemand.com/oauth/token
+AICORE_CLIENT_ID=...
+AICORE_CLIENT_SECRET=...
+AICORE_RESOURCE_GROUP=...
+
+# Resolve deployment URL by model name (recommended)
+AUDIO_MODEL_NAME=gemini-2.5-flash
+
+# Or override with an explicit deployment id
+# AUDIO_DEPLOYMENT_ID=<deployment-id>
+
+# Audio is sent to Gemini as multimodal inline data via the deployment's
+# /models/{model}:generateContent endpoint (no api-version parameter).
 
 # Mode Configuration
-MOCK_MODE=false           # Set to true for testing without SAP infrastructure
+MOCK_MODE=false           # Set to true for testing without external LLM connectivity
 AGENTIC_MODE=true         # Enable DeepAgent with MCP tools
 
 # LLM Model

@@ -4,9 +4,7 @@ from typing import Optional
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.language_models.chat_models import BaseChatModel
-from gen_ai_hub.proxy.langchain import init_llm
-from gen_ai_hub.proxy.core.base import BaseProxyClient
-from gen_ai_hub.proxy.core.proxy_clients import get_proxy_client
+from langchain_openai import ChatOpenAI
 from app.core.config import settings
 from app.models.schemas import ChatSession
 
@@ -15,7 +13,6 @@ logger = logging.getLogger(__name__)
 
 # Singleton summarization LLM instance
 _summarization_llm_instance: Optional[BaseChatModel] = None
-_summarization_proxy_client_instance: Optional[BaseProxyClient] = None
 
 
 def _get_summarization_llm() -> BaseChatModel:
@@ -26,26 +23,21 @@ def _get_summarization_llm() -> BaseChatModel:
     Returns:
         Initialized summarization LLM instance
     """
-    global _summarization_llm_instance, _summarization_proxy_client_instance
+    global _summarization_llm_instance
     
     if _summarization_llm_instance is None:
         logger.info("Initializing summarization LLM instance (first time)")
-        
-        # Initialize proxy client
-        _summarization_proxy_client_instance = get_proxy_client(
-            proxy_server_url=settings.aicore_base_url or None,
-            auth_url=settings.aicore_auth_url or None,
-            client_id=settings.aicore_client_id or None,
-            client_secret=settings.aicore_client_secret or None,
-            resource_group=settings.aicore_resource_group or None,
-        )
-        
-        # Initialize LLM with LangChain wrapper (use cheaper model for summarization)
-        _summarization_llm_instance = init_llm(
-            model_name=settings.summarization_llm_model,
-            proxy_client=_summarization_proxy_client_instance,
-            max_tokens=settings.summarization_max_tokens,
+
+        base_url = (settings.litellm_proxy_url or "").rstrip("/")
+        if base_url and not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+
+        _summarization_llm_instance = ChatOpenAI(
+            model=settings.summarization_llm_model,
+            api_key=settings.litellm_api_key or None,
+            base_url=base_url or None,
             temperature=settings.summarization_temperature,
+            max_tokens=settings.summarization_max_tokens,
         )
         
         logger.info(f"Summarization LLM initialized with model: {settings.summarization_llm_model}")

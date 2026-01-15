@@ -1,4 +1,4 @@
-"""LLM service using SAP Generative AI Hub SDK with chat history support."""
+"""LLM service via LiteLLM (OpenAI-compatible) with chat history support."""
 import asyncio
 import logging
 from typing import AsyncGenerator, Optional
@@ -6,9 +6,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.language_models.chat_models import BaseChatModel
-from gen_ai_hub.proxy.langchain import init_llm
-from gen_ai_hub.proxy.core.base import BaseProxyClient
-from gen_ai_hub.proxy.core.proxy_clients import get_proxy_client
+from langchain_openai import ChatOpenAI
 from app.core.config import settings
 from app.services.session_storage import SessionStorage
 
@@ -17,7 +15,6 @@ logger = logging.getLogger(__name__)
 
 # Singleton LLM instance
 _llm_instance: Optional[BaseChatModel] = None
-_proxy_client_instance: Optional[BaseProxyClient] = None
 
 
 def _get_llm() -> BaseChatModel:
@@ -27,26 +24,21 @@ def _get_llm() -> BaseChatModel:
     Returns:
         Initialized LLM instance
     """
-    global _llm_instance, _proxy_client_instance
+    global _llm_instance
     
     if _llm_instance is None:
         logger.info("Initializing LLM instance (first time)")
-        
-        # Initialize proxy client
-        _proxy_client_instance = get_proxy_client(
-            proxy_server_url=settings.aicore_base_url or None,
-            auth_url=settings.aicore_auth_url or None,
-            client_id=settings.aicore_client_id or None,
-            client_secret=settings.aicore_client_secret or None,
-            resource_group=settings.aicore_resource_group or None,
-        )
-        
-        # Initialize LLM with LangChain wrapper
-        _llm_instance = init_llm(
-            model_name=settings.llm_model,
-            proxy_client=_proxy_client_instance,
-            max_tokens=settings.llm_max_tokens,
+
+        base_url = (settings.litellm_proxy_url or "").rstrip("/")
+        if base_url and not base_url.endswith("/v1"):
+            base_url = f"{base_url}/v1"
+
+        _llm_instance = ChatOpenAI(
+            model=settings.llm_model,
+            api_key=settings.litellm_api_key or None,
+            base_url=base_url or None,
             temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
         )
         
         logger.info(f"LLM initialized successfully with model: {settings.llm_model}")

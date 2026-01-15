@@ -1,4 +1,4 @@
-"""Audio transcription service using SAP Generative AI Hub (Gemini 2.5 Flash)."""
+"""Audio transcription service via SAP AI Core deployment (sap-ai-sdk-core + direct HTTP call)."""
 from __future__ import annotations
 
 import asyncio
@@ -6,104 +6,53 @@ import base64
 import logging
 from typing import Optional
 
-from gen_ai_hub.proxy.core.proxy_clients import get_proxy_client
-from gen_ai_hub.proxy.native.google_vertexai.clients import GenerativeModel
+import httpx
+from ai_core_sdk.ai_core_v2_client import AICoreV2Client
+from ai_core_sdk.models import Deployment
 
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_audio_proxy_client: Optional[object] = None
-_audio_model: Optional[GenerativeModel] = None
+_aicore_client: Optional[AICoreV2Client] = None
+_audio_deployment_url: Optional[str] = None
 
 
-def _resolve_audio_profile() -> tuple[dict[str, str], str]:
-    """Return the AI Core profile to use for audio transcription."""
+def _get_aicore_client() -> AICoreV2Client:
+    global _aicore_client
 
-    instance = (settings.audio_model_instance or "US").strip().upper()
-    if instance not in {"US", "JP"}:
-        raise ValueError(
-            "Unsupported AUDIO_MODEL_INSTANCE value. Use 'US' or 'JP'."
+    if _aicore_client is not None:
+        return _aicore_client
+
+    _aicore_client = AICoreV2Client.from_env()
+    return _aicore_client
+
+
+def _get_audio_deployment_url() -> str:
+    client = _get_aicore_client()
+
+    global _audio_deployment_url
+    if _audio_deployment_url:
+        return _audio_deployment_url
+
+    audio_model_name = (settings.audio_model_name or "").strip()
+    if not audio_model_name:
+        raise ValueError("AUDIO_MODEL_NAME must be configured")
+
+    deployments = client.deployment.query(scenario_id="foundation-models")
+    for deployment in deployments.resources:
+        deployment = deployment  # type: Deployment
+        model_name = (
+            deployment.details.get("resources", {})
+            .get("backend_details", {})
+            .get("model", {})
+            .get("name")
         )
+        if model_name == audio_model_name:
+            _audio_deployment_url = str(deployment.deployment_url).rstrip("/")
+            return _audio_deployment_url
 
-    if instance == "US":
-        profile = {
-            "base_url": settings.aicore_base_url_us,
-            "auth_url": settings.aicore_auth_url_us,
-            "client_id": settings.aicore_client_id_us,
-            "client_secret": settings.aicore_client_secret_us,
-            "resource_group": settings.aicore_resource_group_us,
-        }
-        required_names = [
-            ("AICORE_BASE_URL_US", profile["base_url"]),
-            ("AICORE_AUTH_URL_US", profile["auth_url"]),
-            ("AICORE_CLIENT_ID_US", profile["client_id"]),
-            ("AICORE_CLIENT_SECRET_US", profile["client_secret"]),
-            ("AICORE_RESOURCE_GROUP_US", profile["resource_group"]),
-        ]
-    else:  # JP
-        profile = {
-            "base_url": settings.aicore_base_url,
-            "auth_url": settings.aicore_auth_url,
-            "client_id": settings.aicore_client_id,
-            "client_secret": settings.aicore_client_secret,
-            "resource_group": settings.aicore_resource_group,
-        }
-        required_names = [
-            ("AICORE_BASE_URL", profile["base_url"]),
-            ("AICORE_AUTH_URL", profile["auth_url"]),
-            ("AICORE_CLIENT_ID", profile["client_id"]),
-            ("AICORE_CLIENT_SECRET", profile["client_secret"]),
-            ("AICORE_RESOURCE_GROUP", profile["resource_group"]),
-        ]
-
-    missing = [name for name, value in required_names if not value]
-    if missing:
-        raise ValueError(
-            "Missing required AI Core configuration values for"
-            f" {instance} instance: " + ", ".join(missing)
-        )
-
-    return profile, instance
-
-def _get_audio_proxy_client():
-    """Return a singleton proxy client configured for the selected instance."""
-    global _audio_proxy_client
-
-    if _audio_proxy_client is not None:
-        return _audio_proxy_client
-
-    profile, instance = _resolve_audio_profile()
-
-    logger.info(
-        "Initializing audio transcription proxy client (%s region)", instance
-    )
-    _audio_proxy_client = get_proxy_client(
-        proxy_version="gen-ai-hub",
-        base_url=profile["base_url"],
-        auth_url=profile["auth_url"],
-        client_id=profile["client_id"],
-        client_secret=profile["client_secret"],
-        resource_group=profile["resource_group"],
-    )
-    return _audio_proxy_client
-
-def _get_audio_model() -> GenerativeModel:
-    """Return a singleton GenerativeModel for audio transcription."""
-    global _audio_model
-
-    if _audio_model is not None:
-        return _audio_model
-
-    proxy_client = _get_audio_proxy_client()
-    logger.info(
-        "Initializing audio transcription model: %s", settings.audio_transcription_model
-    )
-    _audio_model = GenerativeModel(
-        proxy_client=proxy_client,
-        model_name=settings.audio_transcription_model,
-    )
-    return _audio_model
+    raise RuntimeError(f"Could not find deployment for AUDIO_MODEL_NAME='{audio_model_name}'")
 
 async def transcribe_audio_bytes(
     audio_bytes: bytes,
@@ -116,25 +65,30 @@ async def transcribe_audio_bytes(
     if not audio_bytes:
         raise ValueError("Audio payload is empty")
 
-    model = _get_audio_model()
-    base64_data = base64.b64encode(audio_bytes).decode("utf-8")
+    deployment_url = _get_audio_deployment_url()
+    model_name = (settings.audio_model_name or "").strip()
+    if not model_name:
+        raise ValueError("AUDIO_MODEL_NAME must be configured for Gemini multimodal transcription")
 
-    content = [
-        {
-            "role": "user",
-            "parts": [
-                {"text": prompt},
-                {
-                    "inline_data": {
-                        "mime_type": mime_type,
-                        "data": base64_data,
-                    }
-                },
-            ],
-        }
-    ]
+    endpoint = f"{deployment_url}/models/{model_name}:generateContent"
 
-    generation_config = {"audio_timestamp": True} if enable_timestamps else None
+    client = _get_aicore_client()
+
+    headers: dict[str, str] = {
+        "Authorization": client.rest_client.get_token(),
+    }
+    resource_group = client.rest_client.headers.get("AI-Resource-Group")
+    if resource_group:
+        headers["AI-Resource-Group"] = resource_group
+
+    params: dict[str, str] = {
+        "$alt": "json;enum-encoding=int",
+    }
+
+    headers.setdefault(
+        "x-goog-request-params",
+        f"model=projects/not-applicable/locations/not-applicable/publishers/google/models/{model_name}",
+    )
 
     loop = asyncio.get_running_loop()
     logger.debug(
@@ -143,29 +97,55 @@ async def transcribe_audio_bytes(
         enable_timestamps,
     )
 
-    def _invoke_model():
-        return model.generate_content(
-            content,
-            generation_config=generation_config if generation_config else None,
-        )
+    def _invoke_sync() -> str:
+        base64_data = base64.b64encode(audio_bytes).decode("utf-8")
 
-    response = await loop.run_in_executor(None, _invoke_model)
+        body: dict[str, object] = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [
+                        {"text": prompt},
+                        {
+                            "inline_data": {
+                                "mime_type": mime_type,
+                                "data": base64_data,
+                            }
+                        },
+                    ],
+                }
+            ],
+        }
+        if enable_timestamps:
+            body["generationConfig"] = {"audioTimestamp": True}
 
-    text = getattr(response, "text", None)
-    if not text:
-        # Fallback to extracting text from candidates if necessary
-        candidates = getattr(response, "candidates", None)
-        if candidates:
-            text = "\n".join(
-                part.text
-                for candidate in candidates
-                for part in getattr(candidate, "content", [])
-                if getattr(part, "text", None)
-            ).strip()
+        with httpx.Client(timeout=120) as http:
+            resp = http.post(endpoint, params=params, headers=headers, json=body)
+            resp.raise_for_status()
+            payload = resp.json()
 
-    if not text:
+        if not isinstance(payload, dict):
+            raise RuntimeError("Audio transcription response was not JSON object")
+
+        candidates = payload.get("candidates")
+        if isinstance(candidates, list) and candidates:
+            parts = (
+                candidates[0]
+                .get("content", {})
+                .get("parts", [])
+            )
+            if isinstance(parts, list):
+                text = "\n".join(
+                    part.get("text", "")
+                    for part in parts
+                    if isinstance(part, dict) and part.get("text")
+                ).strip()
+                if text:
+                    return text
+
         raise RuntimeError("Audio transcription response did not contain any text")
 
+    text = await loop.run_in_executor(None, _invoke_sync)
     logger.debug("Audio transcription completed (%d characters)", len(text))
-    return text.strip()
+    return text
                                                                             

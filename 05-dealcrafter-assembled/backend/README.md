@@ -18,7 +18,7 @@ FastAPI backend with DeepAgent for the DealCrafter financial research assistant.
 ## Installation
 
 ```bash
-uv sync
+python dev_setup.py
 ```
 
 ## Development
@@ -26,10 +26,16 @@ uv sync
 Start the development server:
 
 ```bash
-uv run uvicorn app.main:app --reload --port 8000
+python dev_setup.py --install deepagents --start-server
 ```
 
 The backend runs on http://localhost:8000.
+
+To enable auto-reload file watching (optional):
+
+```bash
+UVICORN_RELOAD=true python dev_setup.py --start-server
+```
 
 ## Configuration
 

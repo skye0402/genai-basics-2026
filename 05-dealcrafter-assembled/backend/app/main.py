@@ -68,10 +68,17 @@ async def health():
 
 if __name__ == "__main__":
     import uvicorn
+    reload_enabled = os.environ.get("UVICORN_RELOAD", "false").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "y",
+        "on",
+    }
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=int(os.environ.get("PORT", 8000)),
-        reload=True,
+        reload=reload_enabled,
         log_level=settings.log_level.lower()
     )

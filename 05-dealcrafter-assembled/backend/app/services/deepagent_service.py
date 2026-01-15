@@ -154,7 +154,7 @@ async def _get_agent() -> tuple[Any, Optional[MultiServerMCPClient]]:
         _agent_instance = create_deep_agent(
             model=model,
             tools=mcp_tools,
-            instructions=system_prompt,
+            system_prompt=system_prompt,
         )
         
         logger.info("DeepAgent initialized successfully")

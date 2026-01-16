@@ -1079,27 +1079,66 @@ ${preview}
       // Load document with image extraction
       const { documents, images } = await this.loadDocumentWithImages(filePath, documentId, jobId);
 
-      // Store extracted images in HANA
+      // Store extracted images in HANA with parallel processing
       if (images.length > 0) {
         if (jobId) {
           updateJob(jobId, {
             stage: 'storing',
-            message: `Storing ${images.length} extracted images...`,
+            message: `Storing ${images.length} extracted images (parallel)...`,
           });
         }
-        for (const img of images) {
-          await imageStorageService.storeImage({
-            imageId: img.imageId,
-            documentId,
-            pageNumber: img.pageNumber,
-            mimeType: img.mimeType,
-            width: img.width,
-            height: img.height,
-            description: img.description,
-            imageData: img.imageData,
-          });
+
+        // Parallel image storage with configurable concurrency
+        const concurrency = parseInt(process.env.IMAGE_STORAGE_CONCURRENCY || '5', 10);
+        const maxRetries = parseInt(process.env.IMAGE_STORAGE_RETRIES || '3', 10);
+        const baseDelayMs = parseInt(process.env.IMAGE_STORAGE_RETRY_DELAY_MS || '1000', 10);
+
+        const storeWithRetry = async (img: ExtractedImage): Promise<void> => {
+          for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+              await imageStorageService.storeImage({
+                imageId: img.imageId,
+                documentId,
+                pageNumber: img.pageNumber,
+                mimeType: img.mimeType,
+                width: img.width,
+                height: img.height,
+                description: img.description,
+                imageData: img.imageData,
+              });
+              return;
+            } catch (err: any) {
+              const isRateLimit = err?.message?.includes('429') ||
+                                  err?.message?.toLowerCase().includes('rate limit') ||
+                                  err?.message?.toLowerCase().includes('too many requests');
+              const isLastAttempt = attempt === maxRetries;
+
+              if (isRateLimit && !isLastAttempt) {
+                const delayMs = baseDelayMs * Math.pow(2, attempt);
+                console.warn(`Rate limited storing image ${img.imageId} (attempt ${attempt + 1}/${maxRetries + 1}). Retrying in ${delayMs}ms...`);
+                await new Promise(resolve => setTimeout(resolve, delayMs));
+                continue;
+              }
+
+              console.error(`Failed to store image ${img.imageId}:`, err?.message || err);
+              throw err;
+            }
+          }
+        };
+
+        // Process in batches
+        let storedCount = 0;
+        for (let batchStart = 0; batchStart < images.length; batchStart += concurrency) {
+          const batch = images.slice(batchStart, batchStart + concurrency);
+          await Promise.all(batch.map(storeWithRetry));
+          storedCount += batch.length;
+          if (jobId) {
+            updateJob(jobId, {
+              message: `Stored ${storedCount}/${images.length} images...`,
+            });
+          }
         }
-        console.log(`  ✅ Stored ${images.length} images in HANA`);
+        console.log(`  ✅ Stored ${images.length} images in HANA (parallel)`);
       }
 
       const totalPagesFromDocs = documents.reduce((max: number, doc: Document) => {

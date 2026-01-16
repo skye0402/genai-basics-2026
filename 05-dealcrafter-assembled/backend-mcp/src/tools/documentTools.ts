@@ -442,12 +442,13 @@ Use the image markdown syntax to display images: ![description](image:imageId)`,
   // 5) Search images by description: semantic search on image descriptions
   server.tool(
     'search_images',
-    `Search for images by their visual descriptions using semantic similarity.
-Use this when you need to find specific types of images (e.g., "engine diagram", "financial chart", "product photo").
-Returns images ranked by how well their descriptions match the query.
+    `PREFERRED tool for finding images. Searches images by their visual content descriptions using semantic similarity.
+Use this FIRST when looking for specific types of images (e.g., "engine diagram", "torque curve graph", "product photo").
+This is much faster and more accurate than browsing all images with get_document_images.
+Returns the most relevant images ranked by similarity score.
 To display an image, use markdown syntax: ![description](image:imageId)`,
     {
-      query: z.string().describe('Search query describing the type of image you need'),
+      query: z.string().describe('Search query describing the type of image you need (e.g., "engine performance graph", "transmission diagram")'),
       k: z
         .number()
         .optional()
@@ -520,17 +521,20 @@ To display an image, use markdown syntax: ![description](image:imageId)`,
   );
 
   // 6) Get document images: retrieve image metadata for a document
-  //    Allows LLM to discover and reference images in responses
+  //    Use search_images instead when looking for specific types of images
   server.tool(
     'get_document_images',
-    'Get metadata for all images extracted from a document. Returns image IDs, descriptions, page numbers, and dimensions. Use this to discover relevant images that can be included in your response. To display an image, use markdown syntax: ![description](image:imageId)',
+    `List all images from a document or specific page. Use this ONLY when you need to see ALL images from a document.
+WARNING: For finding specific images (e.g., "engine graph", "diagram"), use search_images instead - it's faster and more accurate.
+This tool is best for: getting a complete inventory of images, or when you already know the exact page number.
+To display an image, use markdown syntax: ![description](image:imageId)`,
     {
       document_id: z.string().describe('Document ID to get images for'),
       page_number: z
         .number()
         .int()
         .optional()
-        .describe('Optional: filter to images from a specific page (1-based)'),
+        .describe('Optional: filter to images from a specific page (1-based). Omit to get ALL images.'),
     },
     async ({ document_id, page_number }) => {
       logInfo(

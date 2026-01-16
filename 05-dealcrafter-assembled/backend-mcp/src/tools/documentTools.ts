@@ -33,7 +33,7 @@ export function registerDocumentSearchTool(server: McpServer): void {
         .number()
         .optional()
         .default(5)
-        .describe('Number of documents to retrieve based on header summaries (default: 5)'),
+        .describe('Number of documents to retrieve based on header summaries (default: 10)'),
     },
     async ({ query, k }) => {
       logInfo(`Tool: search_document_headers | query: ${query}, k: ${k}`);
@@ -90,7 +90,7 @@ export function registerDocumentSearchTool(server: McpServer): void {
   // 2) Content-level search: search within document chunks, optionally filtered by document_ids
   server.tool(
     'search_document_content',
-    'Search within document content chunks using semantic similarity. Use this to retrieve specific passages from documents. Optionally provide document_ids (from a header search) to restrict the search to particular documents. E.g. ["f66d867e225e3ca91142d3476ad93d69", "c76d867e225e3ca91142d3476ad93d69", ...] and/or document names/ titles or filenames in parameter "document_names" like ["ABC-Bank- 2024-External.docx", "Banking Expense Policies", ...]',
+    'Search within document content chunks using semantic similarity. Use this to retrieve specific passages from documents. Optionally provide document_ids (from a header search) to restrict the search to particular documents. E.g. ["f66d867e225e3ca91142d3476ad93d69", "c76d867e225e3ca91142d3476ad93d69", ...] and/or document names/ titles or filenames in parameter "document_names" like ["ABC-Bank- 2024-External.docx", "Banking Expense Policies", ...]. When using results in a response, include footnote markers (e.g., [^1]) and a footnote list at the end with document name + page number references.',
     {
       query: z.string().describe('Search query text'),
       k: z
@@ -273,7 +273,8 @@ This is the RECOMMENDED tool when you need both text content AND images. It ensu
 Returns:
 - Text chunks matching the query (with page numbers)
 - Images from those pages that also match the query by their visual descriptions
-Use the image markdown syntax to display images: ![description](image:imageId)`,
+Use the image markdown syntax to display images: ![description](image:imageId)
+When responding to users, include footnote markers (e.g., [^1]) and a footnote list at the end with document name + page number references.`,
     {
       query: z.string().describe('Search query text'),
       text_k: z

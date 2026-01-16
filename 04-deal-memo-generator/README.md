@@ -1,34 +1,72 @@
-# Part 4: The Deal Memo Generator
+# Part 4: Agentic Deal Memo Generator
 
-> **Goal:** Generate a professional Investment Memo in **Japanese** (案件概要書) based on multilingual inputs.
+> **Goal:** Build an **agentic workflow** using LangGraph's supervisor pattern to generate a professional Japanese Investment Memo (案件概要書).
 
 ---
 
 ## 🎯 What You'll Build
 
-The final piece: a **bilingual AI analyst** that:
-- Reads English/Japanese news, documents, and stock data
+An **agentic AI system** that:
+- Uses a **supervisor LLM** to decide which tools to call
+- Implements **conditional routing** based on LLM decisions
+- Loops until the supervisor has enough data
+- Includes a **quality check** with optional refinement
 - Generates a formal Japanese 案件概要書 (Deal Memo)
-- Follows Itochu's Corporate Planning Division (経営企画部) format
 
 ---
 
-## 🌏 The "Wow" Factor
+## 🧠 Agentic vs Sequential
 
-| Input | Output |
-|-------|--------|
-| News articles (English/Japanese) | **Japanese** |
-| PDF documents (English/Japanese) | **Japanese** |
-| Stock data (English) | **Japanese** |
-| → Final Deal Memo | **100% Japanese (敬語/Business Japanese)** |
-
-The AI acts as an elite bilingual analyst!
+| Sequential (Old) | Agentic (New) |
+|------------------|---------------|
+| Hardcoded order: stock → news → docs → memo | LLM decides what to gather next |
+| Always runs all steps | Stops when it has enough data |
+| No quality feedback | Quality check with refinement loop |
+| Simple linear flow | Conditional edges + loops |
 
 ---
 
-## 📋 Scenario
+## 🏗️ Architecture
 
-> "Take all the analysis from Parts 1-3 and generate a formal Deal Memo for {COMPANY_NAME} in Itochu format."
+```
+                    ┌─────────────┐
+                    │   START     │
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+              ┌─────│  Supervisor │◄────────────────┐
+              │     └──────┬──────┘                 │
+              │            │ (decides next action)  │
+              │     ┌──────┴──────┐                 │
+              │     │ Conditional │                 │
+              │     │   Edges     │                 │
+              │     └─────┬───────┘                 │
+              │           │                         │
+    ┌─────────┼───────────┼───────────┐            │
+    │         │           │           │            │
+┌───▼───┐ ┌───▼───┐ ┌─────▼─────┐ ┌───▼────┐      │
+│ Stock │ │ News  │ │   Docs    │ │Generate│      │
+│ Node  │ │ Node  │ │   Node    │ │  Memo  │      │
+└───┬───┘ └───┬───┘ └─────┬─────┘ └───┬────┘      │
+    │         │           │           │            │
+    └─────────┴───────────┴───────────┘            │
+              │                       │            │
+              │ (back to supervisor)  │            │
+              └───────────────────────┘            │
+                                      │            │
+                               ┌──────▼──────┐     │
+                               │   Quality   │     │
+                               │    Check    │     │
+                               └──────┬──────┘     │
+                                      │            │
+                               ┌──────┴──────┐     │
+                               │ score < 6?  │─YES─┘
+                               └──────┬──────┘ (refine)
+                                      │ NO
+                               ┌──────▼──────┐
+                               │     END     │
+                               └─────────────┘
+```
 
 ---
 
@@ -49,118 +87,159 @@ uv run python memo_generator.py
 
 ---
 
-## 📝 Output Format (案件概要書)
-
-```markdown
-# 案件概要書 (Deal Memo): {COMPANY_NAME}
-
-## 1. エグゼクティブサマリー (Executive Summary)
-* [3-bullet summary]
-* [Conclusion: 買い/保有/売り]
-
-## 2. 企業概要 (Company Overview)
-* **社名:** {COMPANY_NAME}
-* **主要事業:** [Description]
-* **直近株価:** ¥X,XXX (変動率: X.X%)
-
-## 3. 市場分析・外部環境 (Market Analysis)
-* [Market trends and external factors]
-
-## 4. 財務・リスク評価 (Financial & Risk Assessment)
-* **強み (Pros):** [Strengths]
-* **リスク (Cons):** [Risks]
-
-## 5. 伊藤忠商事としての戦略的意義 (Strategic Fit)
-* [Alignment with "Brand-new Deal" strategy]
-
-## 6. 推奨アクション (Recommendation)
-* [Clear recommendation]
-```
-
----
-
 ## 🏋️ Exercises
 
-### Exercise 4a: Load the System Prompt
+### Exercise 4a: Study the State Definition
+
+The `MemoState` TypedDict defines what data flows through the graph:
+- `stock_data`, `news_data`, `doc_data`: Gathered information
+- `next_action`: Supervisor's decision
+- `gathered_sources`: Track what's been collected
+- `quality_score`: Quality rating (1-10)
+
+### Exercise 4b: Implement Helper Functions
 
 ```python
-def get_system_prompt() -> str:
-    # TODO: Format the system prompt with company details
+def get_hana_connection():
+    # TODO: Reuse the HANA connection pattern from Part 1/3
 ```
 
-### Exercise 4b: Run the Full Workflow
+### Exercise 4c: Implement MCP Tool Calls
 
 ```python
-def generate_memo(query: str) -> str:
-    # TODO: Reuse the analyst workflow from Part 3
-    # TODO: Pass the analysis to the LLM with the Japanese system prompt
-    # TODO: Return the formatted 案件概要書
+async def call_mcp_stock(ticker: str) -> dict:
+    # TODO: Call MCP server to get stock info (reuse Part 2/3 pattern)
+
+async def call_mcp_news(query: str) -> str:
+    # TODO: Call MCP server to search news
+
+def get_documents(company_name: str) -> str:
+    # TODO: Retrieve documents from HANA vector store
+```
+
+### Exercise 4d: Implement Node Functions
+
+```python
+async def supervisor_node(state: MemoState) -> dict:
+    # TODO: LLM decides what action to take next
+    # Key: Format SUPERVISOR_PROMPT and parse the response
+
+async def get_stock_node(state: MemoState) -> dict:
+    # TODO: Fetch stock data via MCP
+
+async def generate_memo_node(state: MemoState) -> dict:
+    # TODO: Generate the Deal Memo using gathered data
+
+async def quality_check_node(state: MemoState) -> dict:
+    # TODO: Rate the memo quality (1-10)
+```
+
+### Exercise 4e: Implement Routing Functions
+
+```python
+def route_supervisor(state) -> Literal["get_stock", "get_news", "get_docs", "generate_memo"]:
+    # TODO: Return the supervisor's decision from state
+
+def route_quality(state) -> Literal["refine", "end"]:
+    # TODO: If score < 6 and iteration < 2, refine; else end
+```
+
+### Exercise 4f: Build the LangGraph Agent
+
+```python
+def build_agent():
+    # TODO: Create StateGraph with MemoState
+    # TODO: Add nodes (supervisor, get_stock, get_news, get_docs, generate_memo, quality_check)
+    # TODO: Add conditional edges from supervisor
+    # TODO: Add edges from tools back to supervisor
+    # TODO: Add quality check routing
+    # TODO: Compile and return
 ```
 
 ---
 
 ## 💡 Key Concepts
 
-### Bilingual Prompt Engineering
+### Supervisor Pattern
 
-The system prompt instructs the LLM to:
-1. Accept multilingual input
-2. Generate professional Japanese output (敬語/Keigo)
-3. Follow strict document formatting
+The supervisor LLM acts as a "manager" that:
+1. Evaluates current state (what data do we have?)
+2. Decides next action (get_stock, get_news, get_docs, or generate_memo)
+3. Loops until satisfied
 
-### The 経営企画部 Persona
+### Conditional Edges
 
-The AI adopts the role of a "Strategic Planning Department Chief":
-- Objective and risk-aware
-- Profit-driven ("Earn" mindset)
-- Formal business Japanese
+LangGraph's `add_conditional_edges` allows routing based on state:
+```python
+builder.add_conditional_edges(
+    "supervisor",
+    route_supervisor,  # Function that returns next node name
+    {"get_stock": "get_stock", "get_news": "get_news", ...}
+)
+```
+
+### Quality Check Loop
+
+After generating the memo, a quality check node rates it 1-10.
+If score < 6, the graph loops back to regenerate.
 
 ---
 
 ## ✅ Success Criteria
 
 ```
-🔄 Generating Deal Memo for Sakura Internet (3778.T)
-📊 Fetching stock data...
-📰 Searching news...
+📝 DealCrafter - Agentic 案件概要書 Generator
+============================================================
+Target: Sakura Internet (3778.T)
+Mode: Supervisor Agent with Tool Loop
+
+🧠 Supervisor evaluating next action...
+   → Decision: get_stock
+
+📊 Fetching stock data for 3778.T...
+   ✅ Price: ¥5,230 (+2.3%)
+
+🧠 Supervisor evaluating next action...
+   → Decision: get_news
+
+📰 Searching news for Sakura Internet...
+   ✅ Found news articles
+
+🧠 Supervisor evaluating next action...
+   → Decision: get_docs
+
 📄 Retrieving documents...
-📝 Generating Japanese memo...
+   ✅ Retrieved 5 document chunks
+
+🧠 Supervisor evaluating next action...
+   → Decision: generate_memo
+
+📝 Generating Deal Memo...
+   ✅ Memo generated
+
+🔍 Quality check...
+   → Quality score: 8/10
 
 ============================================================
+=== 案件概要書 (Deal Memo) ===
+============================================================
 # 案件概要書 (Deal Memo): さくらインターネット株式会社
-
-## 1. エグゼクティブサマリー
-* 政府クラウド事業の急成長により、売上高は前年比150%増
-* AI主権政策による追い風は継続見込み
-* **結論: 買い（短期的な調整リスクあり）**
-
-## 2. 企業概要
-* **社名:** さくらインターネット株式会社
-* **主要事業:** クラウドインフラ、データセンター運営
-* **直近株価:** ¥5,230 (変動率: +2.3%)
 ...
+
+📊 Final quality score: 8/10
+📋 Sources used: stock, news, docs
+🎉 Deal Memo generation complete!
 ```
-
----
-
-## 🎭 Demo: React Frontend
-
-At the end of this exercise, the facilitator will demo a **React frontend** that:
-- Connects to the MCP server you built in Part 2
-- Displays the Deal Memo in a polished UI
-- Shows the workflow execution in real-time
-
-This is **not hands-on** but shows what's possible!
 
 ---
 
 ## 🏁 Congratulations!
 
-You've built a complete **DealCrafter Assistant** that:
-1. ✅ Ingests financial PDFs into HANA Vector Engine
-2. ✅ Fetches real-time stock data via MCP tools
-3. ✅ Searches market news via Perplexity AI
-4. ✅ Orchestrates analysis with LangGraph
+You've built a complete **Agentic DealCrafter** that:
+1. ✅ Uses a supervisor LLM to orchestrate tool calls
+2. ✅ Implements conditional routing with LangGraph
+3. ✅ Loops until the agent has enough data
+4. ✅ Includes quality check with refinement
 5. ✅ Generates bilingual Japanese reports
 
-**Welcome to the future of investment analysis on SAP BTP!**
+**This is true agentic AI - the LLM decides, not the code!**

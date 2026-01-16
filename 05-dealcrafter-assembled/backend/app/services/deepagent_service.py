@@ -137,6 +137,9 @@ async def _get_agent() -> tuple[Any, Optional[MultiServerMCPClient]]:
             4. Be objective, concise, and risk-aware
             5. Make good use of tools - better more tool calls than less
             6. Include relevant images when they help illustrate your response
+            7. When citing document content, add footnote markers (e.g., [^1]) inline and
+               include a footnote list at the end with document title/filename and page number
+               for each citation (e.g., "[^1]: Mitsubishi Fuso Super Great Brochure — p. 22").
             
             ## Deal Memo Format (when requested)
             If the user asks for a formal Japanese Deal Memo (案件概要書), use this structure:

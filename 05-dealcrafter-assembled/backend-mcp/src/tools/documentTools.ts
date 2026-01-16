@@ -265,7 +265,261 @@ export function registerDocumentSearchTool(server: McpServer): void {
     },
   );
 
-  // 4) Get document images: retrieve image metadata for a document
+  // 4) Page-aware multimodal search: search text chunks first, then find relevant images from those pages
+  server.tool(
+    'search_with_images',
+    `Page-aware multimodal search. Searches text chunks first, then finds relevant images from the same pages (±1 page).
+This is the RECOMMENDED tool when you need both text content AND images. It ensures images are contextually related to the text.
+Returns:
+- Text chunks matching the query (with page numbers)
+- Images from those pages that also match the query by their visual descriptions
+Use the image markdown syntax to display images: ![description](image:imageId)`,
+    {
+      query: z.string().describe('Search query text'),
+      text_k: z
+        .number()
+        .optional()
+        .default(5)
+        .describe('Number of text chunks to retrieve (default: 5)'),
+      image_k: z
+        .number()
+        .optional()
+        .default(3)
+        .describe('Number of images to retrieve per query (default: 3)'),
+      document_ids: z
+        .array(z.string())
+        .optional()
+        .describe('Optional list of document IDs to restrict the search'),
+      document_names: z
+        .array(z.string())
+        .optional()
+        .describe('Optional list of document names to restrict the search'),
+      page_range: z
+        .number()
+        .optional()
+        .default(1)
+        .describe('Include images from pages within this range of text chunk pages (default: 1, meaning ±1 page)'),
+    },
+    async ({ query, text_k, image_k, document_ids, document_names, page_range }) => {
+      logInfo(
+        `Tool: search_with_images | query: ${query}, text_k: ${text_k}, image_k: ${image_k}, page_range: ${page_range}`,
+      );
+
+      try {
+        const service = getDocumentIngestionService();
+        const tenantId = service.getDefaultTenantId();
+
+        // Step 1: Search text chunks
+        const textResults = await service.searchDocuments(
+          query,
+          tenantId,
+          text_k,
+          document_ids,
+          document_names
+        );
+
+        // Extract unique document IDs and page numbers from text results
+        const docPages = new Map<string, Set<number>>();
+        for (const doc of textResults) {
+          const meta = doc.metadata as Record<string, any>;
+          const docId = meta.document_id;
+          const pageNum = meta.page_number;
+          if (docId && typeof pageNum === 'number') {
+            if (!docPages.has(docId)) {
+              docPages.set(docId, new Set());
+            }
+            docPages.get(docId)!.add(pageNum);
+          }
+        }
+
+        // Step 2: Search images filtered by those documents and pages
+        const uniqueDocIds = Array.from(docPages.keys());
+        const allPageNumbers = Array.from(
+          new Set(Array.from(docPages.values()).flatMap((s) => Array.from(s)))
+        );
+
+        let imageResults: Array<{
+          imageId: string;
+          documentId: string;
+          pageNumber: number;
+          description: string;
+          score: number;
+          width: number;
+          height: number;
+          mimeType: string;
+        }> = [];
+
+        if (uniqueDocIds.length > 0 && allPageNumbers.length > 0) {
+          const images = await imageStorageService.searchImagesByDescription(query, {
+            k: image_k,
+            documentIds: uniqueDocIds,
+            pageNumbers: allPageNumbers,
+            pageRange: page_range,
+          });
+
+          imageResults = images.map((img) => ({
+            imageId: img.imageId,
+            documentId: img.documentId,
+            pageNumber: img.pageNumber,
+            description: img.description,
+            score: img.score,
+            width: img.width,
+            height: img.height,
+            mimeType: img.mimeType,
+          }));
+        }
+
+        // Format text results
+        const formattedTextResults = textResults.map((doc, idx) => {
+          const meta = doc.metadata as Record<string, any>;
+          return {
+            rank: idx + 1,
+            content: doc.pageContent,
+            document_id: meta.document_id,
+            page_number: meta.page_number,
+            title: meta.title,
+            score: meta.score,
+          };
+        });
+
+        // Format image results with usage hint
+        const formattedImageResults = imageResults.map((img, idx) => ({
+          rank: idx + 1,
+          image_id: img.imageId,
+          document_id: img.documentId,
+          page_number: img.pageNumber,
+          description: img.description,
+          score: img.score,
+          markdown_syntax: `![${(img.description || 'Image').slice(0, 50)}](image:${img.imageId})`,
+        }));
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  success: true,
+                  query,
+                  text_results: {
+                    count: formattedTextResults.length,
+                    chunks: formattedTextResults,
+                  },
+                  image_results: {
+                    count: formattedImageResults.length,
+                    images: formattedImageResults,
+                    note: 'Images are from the same pages (±page_range) as the text chunks and match the query by description',
+                  },
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (error) {
+        console.error('search_with_images failed:', error);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  success: false,
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // 5) Search images by description: semantic search on image descriptions
+  server.tool(
+    'search_images',
+    `Search for images by their visual descriptions using semantic similarity.
+Use this when you need to find specific types of images (e.g., "engine diagram", "financial chart", "product photo").
+Returns images ranked by how well their descriptions match the query.
+To display an image, use markdown syntax: ![description](image:imageId)`,
+    {
+      query: z.string().describe('Search query describing the type of image you need'),
+      k: z
+        .number()
+        .optional()
+        .default(5)
+        .describe('Number of images to retrieve (default: 5)'),
+      document_ids: z
+        .array(z.string())
+        .optional()
+        .describe('Optional list of document IDs to restrict the search'),
+    },
+    async ({ query, k, document_ids }) => {
+      logInfo(`Tool: search_images | query: ${query}, k: ${k}`);
+
+      try {
+        const images = await imageStorageService.searchImagesByDescription(query, {
+          k,
+          documentIds: document_ids,
+        });
+
+        const formattedResults = images.map((img, idx) => ({
+          rank: idx + 1,
+          image_id: img.imageId,
+          document_id: img.documentId,
+          page_number: img.pageNumber,
+          description: img.description,
+          score: img.score,
+          width: img.width,
+          height: img.height,
+          markdown_syntax: `![${(img.description || 'Image').slice(0, 50)}](image:${img.imageId})`,
+        }));
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  success: true,
+                  query,
+                  count: formattedResults.length,
+                  images: formattedResults,
+                  usage_hint: 'To display an image, use: ![description](image:imageId)',
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+        };
+      } catch (error) {
+        console.error('search_images failed:', error);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(
+                {
+                  success: false,
+                  error: error instanceof Error ? error.message : String(error),
+                },
+                null,
+                2,
+              ),
+            },
+          ],
+          isError: true,
+        };
+      }
+    }
+  );
+
+  // 6) Get document images: retrieve image metadata for a document
   //    Allows LLM to discover and reference images in responses
   server.tool(
     'get_document_images',

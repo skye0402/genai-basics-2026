@@ -332,6 +332,34 @@ export class DocumentIngestionService {
         if (jobId) {
           updateJob(jobId, {
             stage: 'parsing',
+            message: 'Generating quick document summary for context-aware image filtering...',
+          });
+        }
+
+        // First, do a quick text extraction to generate a summary for context-aware image filtering
+        let quickSummary: string | undefined;
+        try {
+          const quickPreview = await this.extractQuickPdfPreview(buffer, 3, 4000);
+          if (quickPreview) {
+            const metadataClient = this.getMetadataClient();
+            const summaryPrompt = `Summarize what this document is about in 2-3 sentences. Focus on the main topic, product, or subject matter.
+
+Document preview:
+${quickPreview}
+
+Summary:`;
+            const response = await metadataClient.invoke(summaryPrompt);
+            const content = (response as any)?.content;
+            quickSummary = typeof content === 'string' ? content.trim() : String(content || '').trim();
+            console.log(`  📋 Quick summary for image context: ${quickSummary.slice(0, 200)}...`);
+          }
+        } catch (summaryErr) {
+          console.warn('Failed to generate quick summary for image context, proceeding without:', summaryErr);
+        }
+
+        if (jobId) {
+          updateJob(jobId, {
+            stage: 'parsing',
             message: 'Extracting text and images from PDF...',
           });
         }
@@ -344,7 +372,8 @@ export class DocumentIngestionService {
               updateJob(jobId, { message: msg });
             }
             console.log(`  📄 ${msg}`);
-          }
+          },
+          quickSummary
         );
 
         const totalPages = pagesWithImages.length;
@@ -761,6 +790,34 @@ export class DocumentIngestionService {
     }
 
     return Array.from(resolvedIds);
+  }
+
+  /**
+   * Extract a quick text preview from a PDF buffer for generating context summary
+   * This is used before full image extraction to provide context for image filtering
+   */
+  private async extractQuickPdfPreview(buffer: Buffer, maxPages: number = 3, maxChars: number = 4000): Promise<string> {
+    try {
+      const { PDFParse } = await import('pdf-parse');
+      const parser = new PDFParse({ data: buffer });
+      const textResult = await parser.getText();
+      const rawText = textResult.text || '';
+      await parser.destroy();
+
+      // Split by page breaks and take first N pages
+      const pages = rawText.split('\f').slice(0, maxPages);
+      let preview = pages.join('\n\n').trim();
+
+      // Truncate to max chars
+      if (preview.length > maxChars) {
+        preview = preview.slice(0, maxChars) + '...';
+      }
+
+      return preview;
+    } catch (err) {
+      console.warn('Failed to extract quick PDF preview:', err);
+      return '';
+    }
   }
 
   /**

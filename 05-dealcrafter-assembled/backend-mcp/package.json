@@ -28,7 +28,7 @@
     "mammoth": "^1.11.0",
     "multer": "^2.0.2",
     "pdf-parse": "^2.4.5",
-    "pdfjs-dist": "^4.10.38",
+    "pdfjs-dist": "^5.4.296",
     "@napi-rs/canvas": "^0.1.68",
     "zod": "^3.25.76"
   },

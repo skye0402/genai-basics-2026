@@ -3,9 +3,13 @@
  * 
  * Stores extracted images in a HANA BLOB table and provides
  * retrieval functionality for serving images via REST API.
+ * 
+ * Supports vector search on image descriptions for page-aware
+ * multimodal retrieval.
  */
 
 import * as hdb from 'hdb';
+import { AzureOpenAiEmbeddingClient } from '@sap-ai-sdk/langchain';
 
 interface HanaConfig {
   host: string;
@@ -28,9 +32,12 @@ export interface StoredImage {
 export class ImageStorageService {
   private hanaClient: any = null;
   private hanaConnectPromise: Promise<void> | null = null;
+  private embeddingClient: AzureOpenAiEmbeddingClient | null = null;
   private readonly config: {
     hana: HanaConfig;
     imageTableName: string;
+    embeddingModel: string;
+    resourceGroup: string;
   };
 
   constructor() {
@@ -42,7 +49,28 @@ export class ImageStorageService {
         password: process.env.HANA_DB_PASSWORD || '',
       },
       imageTableName: process.env.HANA_IMAGE_TABLE || 'LANGCHAIN_DEMO_IMAGES',
+      embeddingModel: process.env.EMBEDDING_MODEL || 'text-embedding-3-small',
+      resourceGroup: process.env.SAP_AI_RESOURCE_GROUP || 'default',
     };
+  }
+
+  /**
+   * Get or initialize the embedding client for image descriptions
+   * Re-reads env vars at runtime to ensure dotenv has loaded
+   */
+  private getEmbeddingClient(): AzureOpenAiEmbeddingClient {
+    // Re-read env vars at runtime (ESM modules can be instantiated before dotenv runs)
+    const embeddingModel = process.env.EMBEDDING_MODEL || this.config.embeddingModel || 'text-embedding-3-small';
+    const resourceGroup = process.env.SAP_AI_RESOURCE_GROUP || this.config.resourceGroup || 'default';
+
+    if (!this.embeddingClient) {
+      console.log(`Initializing image embedding client with model: ${embeddingModel}, resourceGroup: ${resourceGroup}`);
+      this.embeddingClient = new AzureOpenAiEmbeddingClient({
+        modelName: embeddingModel,
+        resourceGroup: resourceGroup,
+      });
+    }
+    return this.embeddingClient;
   }
 
   /**
@@ -173,45 +201,69 @@ export class ImageStorageService {
   }
 
   /**
-   * Ensure the image table exists with the correct schema
+   * Ensure the image table exists with the correct schema (including description_embedding column)
    */
   async ensureImageTable(): Promise<void> {
     await this.initHanaConnection();
 
+    let tableExists = false;
     try {
       const checkSQL = `SELECT TOP 1 * FROM "${this.config.imageTableName}"`;
       await this.executeSQL(checkSQL);
+      tableExists = true;
       console.log(`✅ Image table ${this.config.imageTableName} exists`);
     } catch (error: any) {
-      console.log(`Creating image table ${this.config.imageTableName}...`);
-
-      try {
-        await this.executeSQL(`DROP TABLE "${this.config.imageTableName}"`);
-        console.log(`Dropped existing image table ${this.config.imageTableName}`);
-      } catch (dropError) {
-        // Table doesn't exist, that's fine
-      }
-
-      const createTableSQL = `
-        CREATE TABLE "${this.config.imageTableName}" (
-          "image_id" NVARCHAR(255) PRIMARY KEY,
-          "document_id" NVARCHAR(255) NOT NULL,
-          "page_number" INTEGER NOT NULL,
-          "mime_type" NVARCHAR(64),
-          "width" INTEGER,
-          "height" INTEGER,
-          "description" NCLOB,
-          "image_data" BLOB,
-          "created_at" NVARCHAR(64)
-        )
-      `;
-      await this.executeSQL(createTableSQL);
-      console.log(`✅ Created image table ${this.config.imageTableName}`);
+      // Table doesn't exist, will create it
     }
+
+    if (tableExists) {
+      // Check if description_embedding column exists
+      try {
+        const checkColumnSQL = `SELECT TOP 1 "description_embedding" FROM "${this.config.imageTableName}"`;
+        await this.executeSQL(checkColumnSQL);
+        // Column exists, we're good
+      } catch (colError: any) {
+        // Column doesn't exist - need to add it or recreate table
+        console.log(`⚠️ Image table exists but missing description_embedding column.`);
+        console.log(`   Attempting to add column...`);
+        
+        try {
+          const alterSQL = `ALTER TABLE "${this.config.imageTableName}" ADD ("description_embedding" REAL_VECTOR(1536))`;
+          await this.executeSQL(alterSQL);
+          console.log(`✅ Added description_embedding column to ${this.config.imageTableName}`);
+        } catch (alterError: any) {
+          console.error(`❌ Failed to add description_embedding column: ${alterError?.message}`);
+          console.log(`   You may need to drop and recreate the image table, or re-ingest documents.`);
+          console.log(`   To drop the table, run: DROP TABLE "${this.config.imageTableName}"`);
+          throw new Error(`Image table schema is outdated. Please drop table "${this.config.imageTableName}" and re-ingest documents to enable image search.`);
+        }
+      }
+      return;
+    }
+
+    // Table doesn't exist, create it
+    console.log(`Creating image table ${this.config.imageTableName}...`);
+
+    const createTableSQL = `
+      CREATE TABLE "${this.config.imageTableName}" (
+        "image_id" NVARCHAR(255) PRIMARY KEY,
+        "document_id" NVARCHAR(255) NOT NULL,
+        "page_number" INTEGER NOT NULL,
+        "mime_type" NVARCHAR(64),
+        "width" INTEGER,
+        "height" INTEGER,
+        "description" NCLOB,
+        "description_embedding" REAL_VECTOR(1536),
+        "image_data" BLOB,
+        "created_at" NVARCHAR(64)
+      )
+    `;
+    await this.executeSQL(createTableSQL);
+    console.log(`✅ Created image table ${this.config.imageTableName} with description_embedding column`);
   }
 
   /**
-   * Store an image in HANA
+   * Store an image in HANA with description embedding for vector search
    */
   async storeImage(params: {
     imageId: string;
@@ -227,14 +279,29 @@ export class ImageStorageService {
 
     const timestamp = new Date().toISOString();
 
+    // Generate embedding for image description
+    let descriptionEmbedding: number[] = [];
+    if (params.description && params.description.trim()) {
+      try {
+        const embeddingClient = this.getEmbeddingClient();
+        descriptionEmbedding = await embeddingClient.embedQuery(params.description.slice(0, 8000));
+      } catch (embErr) {
+        console.warn(`Failed to generate embedding for image ${params.imageId}:`, embErr);
+      }
+    }
+
     // Delete existing image with same ID (upsert behavior)
     const deleteSQL = `DELETE FROM "${this.config.imageTableName}" WHERE "image_id" = ?`;
     await this.executePreparedSQL(deleteSQL, [params.imageId]);
 
+    const embeddingString = descriptionEmbedding.length > 0 
+      ? `[${descriptionEmbedding.join(',')}]` 
+      : null;
+
     const insertSQL = `
       INSERT INTO "${this.config.imageTableName}"
-      ("image_id", "document_id", "page_number", "mime_type", "width", "height", "description", "image_data", "created_at")
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ("image_id", "document_id", "page_number", "mime_type", "width", "height", "description", "description_embedding", "image_data", "created_at")
+      VALUES (?, ?, ?, ?, ?, ?, ?, TO_REAL_VECTOR(?), ?, ?)
     `;
 
     await this.executePreparedSQL(insertSQL, [
@@ -245,11 +312,12 @@ export class ImageStorageService {
       params.width,
       params.height,
       params.description,
+      embeddingString,
       params.imageData,
       timestamp,
     ]);
 
-    console.log(`✅ Stored image ${params.imageId} in HANA`);
+    console.log(`✅ Stored image ${params.imageId} in HANA with description embedding`);
   }
 
   /**
@@ -341,6 +409,90 @@ export class ImageStorageService {
       }));
     } catch (err) {
       console.error(`Error listing images for document ${documentId}:`, err);
+      return [];
+    }
+  }
+
+  /**
+   * Search images by description using vector similarity
+   * Supports filtering by document IDs and page numbers for page-aware retrieval
+   */
+  async searchImagesByDescription(
+    query: string,
+    options?: {
+      k?: number;
+      documentIds?: string[];
+      pageNumbers?: number[];
+      pageRange?: number; // e.g., 1 means include pages ±1 from specified pages
+    }
+  ): Promise<(StoredImage & { score: number })[]> {
+    await this.initHanaConnection();
+
+    const k = options?.k ?? 5;
+    const documentIds = options?.documentIds ?? [];
+    const pageNumbers = options?.pageNumbers ?? [];
+    const pageRange = options?.pageRange ?? 0;
+
+    // Generate query embedding
+    const embeddingClient = this.getEmbeddingClient();
+    const queryEmbedding = await embeddingClient.embedQuery(query);
+    const vectorString = `[${queryEmbedding.join(',')}]`;
+
+    // Build SQL with optional filters
+    let sql = `
+      SELECT TOP ${k}
+        "image_id", "document_id", "page_number", "mime_type", 
+        "width", "height", "description", "created_at",
+        COSINE_SIMILARITY("description_embedding", TO_REAL_VECTOR(?)) as "score"
+      FROM "${this.config.imageTableName}"
+      WHERE "description_embedding" IS NOT NULL
+    `;
+
+    const params: any[] = [vectorString];
+
+    // Filter by document IDs if specified
+    if (documentIds.length > 0) {
+      const placeholders = documentIds.map(() => '?').join(',');
+      sql += ` AND "document_id" IN (${placeholders})`;
+      params.push(...documentIds);
+    }
+
+    // Filter by page numbers (with optional range) if specified
+    if (pageNumbers.length > 0) {
+      if (pageRange > 0) {
+        // Include pages within range of specified pages
+        const pageConditions = pageNumbers.map(() => 
+          `("page_number" BETWEEN ? - ${pageRange} AND ? + ${pageRange})`
+        ).join(' OR ');
+        sql += ` AND (${pageConditions})`;
+        for (const pn of pageNumbers) {
+          params.push(pn, pn);
+        }
+      } else {
+        // Exact page match
+        const placeholders = pageNumbers.map(() => '?').join(',');
+        sql += ` AND "page_number" IN (${placeholders})`;
+        params.push(...pageNumbers);
+      }
+    }
+
+    sql += ` ORDER BY "score" DESC`;
+
+    try {
+      const rows = await this.executePreparedSQL(sql, params);
+      return (rows || []).map((row: any) => ({
+        imageId: row.IMAGE_ID || row.image_id,
+        documentId: row.DOCUMENT_ID || row.document_id,
+        pageNumber: row.PAGE_NUMBER || row.page_number,
+        mimeType: row.MIME_TYPE || row.mime_type,
+        width: row.WIDTH || row.width,
+        height: row.HEIGHT || row.height,
+        description: row.DESCRIPTION || row.description,
+        createdAt: row.CREATED_AT || row.created_at,
+        score: row.SCORE || row.score || 0,
+      }));
+    } catch (err) {
+      console.error('Error searching images by description:', err);
       return [];
     }
   }

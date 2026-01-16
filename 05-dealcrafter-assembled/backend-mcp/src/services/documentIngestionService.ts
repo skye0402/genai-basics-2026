@@ -240,8 +240,11 @@ export class DocumentIngestionService {
     const msg = String(err?.message || err || '');
     const code = String(err?.code || '');
     return (
+      code === 'EHDBCLOSE' ||
       code === 'EHDBOPENCONN' ||
+      msg.includes('EHDBCLOSE') ||
       msg.includes('EHDBOPENCONN') ||
+      msg.toLowerCase().includes('connection closed') ||
       msg.includes('No initialization reply received') ||
       msg.toLowerCase().includes('socket hang up') ||
       msg.toLowerCase().includes('timeout')

@@ -26,7 +26,7 @@ from gen_ai_hub.proxy.langchain.init_models import init_embedding_model
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 # Configuration from environment
-CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "500"))
+CHUNK_SIZE = int(os.getenv("RAG_CHUNK_SIZE", "1000"))
 CHUNK_OVERLAP = int(os.getenv("RAG_CHUNK_OVERLAP", "50"))
 EMBEDDING_MODEL = os.getenv("LLM_EMBEDDING_MODEL", "text-embedding-3-small")
 TABLE_NAME = os.getenv("HANA_TABLE_NAME", "DEALCRAFTER_DOCS")

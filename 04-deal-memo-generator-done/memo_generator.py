@@ -458,8 +458,15 @@ def build_agent():
             "end": END,
         }
     )
-    
-    return builder.compile()
+    app = builder.compile()
+    output_path = "memogenerator_diagram.png"
+    app.get_graph().draw_mermaid_png(
+        output_file_path=output_path,
+        # draw_method=MermaidDrawMethod.API # Optional: Explicitly use API (default)
+        # or use Pyppeteer for local rendering:
+        # draw_method=MermaidDrawMethod.PYPPETEER 
+    )
+    return app
 
 
 # =============================================================================
